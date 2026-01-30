@@ -362,15 +362,15 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "FluentValidation.DependencyInjectionExtensions": {
+              "target": "Package",
+              "version": "[11.9.2, )"
+            },
             "Microsoft.Extensions.Configuration.Abstractions": {
               "target": "Package",
               "version": "[8.0.0, )"
             },
             "Microsoft.Extensions.Configuration.Binder": {
-              "target": "Package",
-              "version": "[8.0.2, )"
-            },
-            "Microsoft.Extensions.DependencyInjection.Abstractions": {
               "target": "Package",
               "version": "[8.0.2, )"
             },
@@ -470,11 +470,11 @@
           "dependencies": {
             "FluentValidation": {
               "target": "Package",
-              "version": "[8.6.3, )"
+              "version": "[11.9.2, )"
             },
             "FluentValidation.DependencyInjectionExtensions": {
               "target": "Package",
-              "version": "[8.6.3, )"
+              "version": "[11.9.2, )"
             },
             "MediatR": {
               "target": "Package",
@@ -601,8 +601,14 @@
               "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Application\\RallyAPI.Orders.Application.csproj": {
                 "projectPath": "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Application\\RallyAPI.Orders.Application.csproj"
               },
+              "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Domain\\RallyAPI.Orders.Domain.csproj": {
+                "projectPath": "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Domain\\RallyAPI.Orders.Domain.csproj"
+              },
               "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Infrastructure\\RallyAPI.Orders.Infrastructure.csproj": {
                 "projectPath": "C:\\Users\\vishw\\source\\repos\\Rally\\src\\Modules\\Orders\\RallyAPI.Orders.Infrastructure\\RallyAPI.Orders.Infrastructure.csproj"
+              },
+              "C:\\Users\\vishw\\source\\repos\\Rally\\src\\RallyAPI.SharedKernel\\RallyAPI.SharedKernel.csproj": {
+                "projectPath": "C:\\Users\\vishw\\source\\repos\\Rally\\src\\RallyAPI.SharedKernel\\RallyAPI.SharedKernel.csproj"
               }
             }
           }
@@ -622,6 +628,16 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "MediatR": {
+              "target": "Package",
+              "version": "[12.4.1, )"
+            },
+            "Microsoft.AspNetCore.OpenApi": {
+              "target": "Package",
+              "version": "[8.0.23, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -1290,10 +1306,6 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
-            "Microsoft.AspNetCore.Http": {
-              "target": "Package",
-              "version": "[2.3.9, )"
-            },
             "Microsoft.Extensions.Logging": {
               "target": "Package",
               "version": "[8.0.1, )"
