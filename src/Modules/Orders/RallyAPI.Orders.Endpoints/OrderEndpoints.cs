@@ -18,6 +18,7 @@ using RallyAPI.Orders.Application.Queries.GetOrderByNumber;
 using RallyAPI.Orders.Application.Queries.GetOrdersByCustomer;
 using RallyAPI.Orders.Application.Queries.GetOrdersByRestaurant;
 using RallyAPI.Orders.Domain.Enums;
+using RallyAPI.SharedKernel.Results;
 
 namespace RallyAPI.Orders.Endpoints;
 
@@ -155,17 +156,30 @@ public static class OrderEndpoints
         ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
+
         if (!currentUser.IsAuthenticated || !currentUser.UserId.HasValue)
         {
             return Results.Unauthorized();
         }
 
         var command = PlaceOrderCommand.Create(
-            currentUser.UserId.Value,
-            currentUser.UserName ?? "Customer",
-            request,
-            currentUser.Phone,
-            currentUser.Email);
+            customerId: currentUser.UserId.Value,
+            customerName: currentUser.UserName ?? "Customer",
+            paymentId: request.PaymentId,
+            request: request,
+            paymentTransactionId: request.PaymentTransactionId,
+            deliveryQuoteId: request.DeliveryQuoteId,
+            customerPhone: currentUser.Phone,
+            customerEmail: currentUser.Email);
+
+
+        //var command = PlaceOrderCommand.Create(
+        //    currentUser.UserId.Value,
+        //    currentUser.UserName ?? "Customer",
+        //     paymentId: request.PaymentId,
+        //    request,
+        //    currentUser.Phone,
+        //    currentUser.Email);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -270,7 +284,7 @@ public static class OrderEndpoints
         ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
-        // TODO: Get restaurant ID from current user's associated restaurant
+        /// TODO: Get restaurant ID from current user's associated restaurant
         // For MVP, accept restaurant ID from user claims or require it in request
         var restaurantId = currentUser.UserId ?? Guid.Empty;
 

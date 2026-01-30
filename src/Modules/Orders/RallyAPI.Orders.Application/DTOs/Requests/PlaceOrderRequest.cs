@@ -6,6 +6,13 @@
 /// </summary>
 public sealed record PlaceOrderRequest
 {
+
+    // === PAYMENT INFO (Required - order is post-payment) ===
+    public string PaymentId { get; init; } = string.Empty;
+    public string? PaymentTransactionId { get; init; }
+    public string? DeliveryQuoteId { get; init; }
+
+
     public Guid RestaurantId { get; init; }
     public string RestaurantName { get; init; } = string.Empty;
     public string? RestaurantPhone { get; init; }
