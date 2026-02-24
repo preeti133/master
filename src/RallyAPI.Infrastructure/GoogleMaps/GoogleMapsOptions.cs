@@ -10,9 +10,9 @@ public sealed class GoogleMapsOptions
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>
-    /// Base URL for Distance Matrix API.
+    /// Base URL for Routes API.
     /// </summary>
-    public string BaseUrl { get; set; } = "https://maps.googleapis.com/maps/api";
+    public string BaseUrl { get; set; } = "https://routes.googleapis.com";
 
     /// <summary>
     /// Request timeout in seconds.
@@ -25,9 +25,9 @@ public sealed class GoogleMapsOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Travel mode: driving, walking, bicycling, transit.
+    /// Travel mode: DRIVE, BICYCLE, WALK, TWO_WHEELER, TRANSIT.
     /// </summary>
-    public string TravelMode { get; set; } = "driving";
+    public string TravelMode { get; set; } = "DRIVE";
 
     /// <summary>
     /// Region bias for results.

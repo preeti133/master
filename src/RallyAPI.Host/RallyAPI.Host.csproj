@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.23">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -20,6 +22,15 @@
     <ProjectReference Include="..\Modules\Users\RallyAPI.Users.Infrastructure\RallyAPI.Users.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Users\RallyAPI.Users.Endpoints\RallyAPI.Users.Endpoints.csproj" />
   </ItemGroup>
+
+	<ItemGroup>
+		<None Update="Keys\private.pem">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Keys\public.pem">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

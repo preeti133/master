@@ -17,6 +17,10 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,9 +48,12 @@ builder.Services.AddDeliveryModule(builder.Configuration);
 
 // Add Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var publicKeyText = File.ReadAllText(jwtSettings["PublicKeyPath"]!);
+var publicKeyPath = Path.Combine(AppContext.BaseDirectory, jwtSettings["PublicKeyPath"]!);
+var publicKeyText = File.ReadAllText(publicKeyPath);
 var rsa = RSA.Create();
 rsa.ImportFromPem(publicKeyText);
+
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -63,6 +70,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+   // Health Checks
+   builder.Services.AddHealthChecks()
+       .AddNpgSql(
+           builder.Configuration.GetConnectionString("Database")!,
+           name: "postgres",
+           tags: new[] { "db", "ready" })
+       .AddRedis(
+           builder.Configuration.GetConnectionString("Redis")!,
+           name: "redis",
+           tags: new[] { "cache", "ready" });
+
 // Add Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
@@ -74,6 +92,14 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("user_type", "restaurant"));
     options.AddPolicy("Admin", policy =>
         policy.RequireClaim("user_type", "admin"));
+    options.AddPolicy("AdminOrRestaurant", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim("user_type", "admin") ||
+            ctx.User.HasClaim("user_type", "restaurant")));
+    options.AddPolicy("AdminOrRider", policy =>
+    policy.RequireAssertion(ctx =>
+        ctx.User.HasClaim("user_type", "admin") ||
+        ctx.User.HasClaim("user_type", "rider")));
 });
 
 // Add these lines
@@ -149,6 +175,22 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = 429; // Too Many Requests
 });
 
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",     // React dev server
+                "http://localhost:5173",     // Vite dev server
+                "http://localhost:8081",     // Expo/React Native web
+                "https://yourdomain.com")   // Production — update before deploy
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
+});
+
 
 var app = builder.Build();
 
@@ -161,7 +203,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -184,6 +226,58 @@ app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
 app.MapDeliveryModuleEndpoints();
 app.MapGet("/", () => "Rally API is running!");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = WriteHealthCheckResponse
+});
 
 app.Run();
 
+
+   static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+
+    var result = JsonSerializer.Serialize(new
+    {
+        status = report.Status.ToString(),
+        duration = report.TotalDuration.TotalMilliseconds + "ms",
+        checks = report.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            duration = e.Value.Duration.TotalMilliseconds + "ms",
+            error = e.Value.Exception?.Message
+        })
+    }, new JsonSerializerOptions { WriteIndented = true });
+
+    return context.Response.WriteAsync(result);
+
+
+
+}
+
+// -------------------------------------------------------
+// EXPECTED RESPONSE from GET /health:
+// -------------------------------------------------------
+//
+//   {
+//     "status": "Healthy",
+//     "duration": "45.2ms",
+//     "checks": [
+//       {
+//         "name": "postgres",
+//         "status": "Healthy",
+//         "duration": "12.1ms",
+//         "error": null
+//       },
+//       {
+//         "name": "redis",
+//         "status": "Healthy",
+//         "duration": "3.4ms",
+//         "error": null
+//       }
+//     ]
+//   }
+//
+// ============================================================================
