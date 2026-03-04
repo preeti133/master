@@ -1,12 +1,34 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using RallyAPI.Users.Application.Restaurants.Commands.Login;
+using Microsoft.AspNetCore.Builder;
 
-namespace RallyAPI.Users.Endpoints.Restaurants
+namespace RallyAPI.Users.Endpoints.Restaurants;
+
+public class Login : IEndpoint
 {
-    internal class Login
+    public void MapEndpoint(IEndpointRouteBuilder app)
     {
+        app.MapPost("/api/restaurants/login", HandleAsync)
+            .WithName("RestaurantLogin")
+            .WithTags("Restaurants")
+            .AllowAnonymous()
+            .RequireRateLimiting("login");
+    }
+
+    public record RestaurantLoginRequest(string Email, string Password);
+
+    private static async Task<IResult> HandleAsync(
+        RestaurantLoginRequest request,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var command = new LoginRestaurantCommand(request.Email, request.Password);
+        var result = await sender.Send(command, cancellationToken);
+
+        return result.IsFailure
+            ? Results.BadRequest(new { error = result.Error.Message })
+            : Results.Ok(result.Value);
     }
 }

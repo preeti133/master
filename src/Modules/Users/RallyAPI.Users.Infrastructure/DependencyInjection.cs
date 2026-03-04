@@ -8,6 +8,7 @@ using RallyAPI.Users.Infrastructure.Services;
 using RallyAPI.SharedKernel.Abstractions.Riders;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using StackExchange.Redis;
+using RallyAPI.SharedKernel.Abstractions.Restaurants;
 namespace RallyAPI.Users.Infrastructure;
 
 public static class DependencyInjection
@@ -63,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminRepository, AdminRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IRestaurantQueryService, RestaurantQueryService>();
 
 
         // Rider services for cross-module communication
@@ -87,6 +89,40 @@ public static class DependencyInjection
         var redisConnection = configuration.GetConnectionString("Redis")!;
         services.AddSingleton<IConnectionMultiplexer>(
             ConnectionMultiplexer.Connect(redisConnection));
+
+        // SMS Service — Exotel in production, Console in development
+
+        var useExotel = configuration.GetSection("Exotel").Exists();
+        if (useExotel)
+        {
+            services.Configure<ExotelOptions>(
+                configuration.GetSection(ExotelOptions.SectionName));
+
+            services.AddHttpClient<ISmsService, ExotelSmsService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+        }
+        else
+        {
+            services.AddSingleton<ISmsService, ConsoleSmsService>();
+        }
+
+        // -------------------------------------------------------
+        // NOTE ON AddHttpClient<ISmsService, ExotelSmsService>:
+        // -------------------------------------------------------
+        // This registers ExotelSmsService as a TYPED HttpClient, meaning:
+        //   - HttpClient is injected into ExotelSmsService's constructor
+        //   - HttpClient lifecycle is managed by IHttpClientFactory (pooling, DNS refresh)
+        //   - No need to manually create/dispose HttpClient
+        //
+        // If your DI method uses WebApplicationBuilder:
+        //   Replace `services.` with `builder.Services.`
+        //   Replace `configuration.` with `builder.Configuration.`
+        //
+        // If your DI method uses IServiceCollection + IConfiguration params:
+        //   Use them directly as shown above.
+        // ============================================================================
 
         services.AddScoped<IOtpService, OtpService>();
 

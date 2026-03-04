@@ -6,17 +6,16 @@ using RallyAPI.Delivery.Endpoints;
 using RallyAPI.Infrastructure;
 using RallyAPI.Integrations.ProRouting;
 using RallyAPI.Orders.Endpoints;
-using RallyAPI.Orders.Infrastructure;
 using RallyAPI.Pricing.Infrastructure;
-using RallyAPI.SharedKernel.Abstractions.Delivery;
 using RallyAPI.SharedKernel.Extensions;
 using RallyAPI.SharedKernel.Infrastructure;
-using RallyAPI.Users.Domain.Entities;
 using RallyAPI.Users.Endpoints;
-using System.Reflection;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,9 +43,12 @@ builder.Services.AddDeliveryModule(builder.Configuration);
 
 // Add Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var publicKeyText = File.ReadAllText(jwtSettings["PublicKeyPath"]!);
+var publicKeyPath = Path.Combine(AppContext.BaseDirectory, jwtSettings["PublicKeyPath"]!);
+var publicKeyText = File.ReadAllText(publicKeyPath);
 var rsa = RSA.Create();
 rsa.ImportFromPem(publicKeyText);
+
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -63,6 +65,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+   // Health Checks
+   builder.Services.AddHealthChecks()
+       .AddNpgSql(
+           builder.Configuration.GetConnectionString("Database")!,
+           name: "postgres",
+           tags: new[] { "db", "ready" })
+       .AddRedis(
+           builder.Configuration.GetConnectionString("Redis")!,
+           name: "redis",
+           tags: new[] { "cache", "ready" });
+
 // Add Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
@@ -74,6 +87,14 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("user_type", "restaurant"));
     options.AddPolicy("Admin", policy =>
         policy.RequireClaim("user_type", "admin"));
+    options.AddPolicy("AdminOrRestaurant", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim("user_type", "admin") ||
+            ctx.User.HasClaim("user_type", "restaurant")));
+    options.AddPolicy("AdminOrRider", policy =>
+    policy.RequireAssertion(ctx =>
+        ctx.User.HasClaim("user_type", "admin") ||
+        ctx.User.HasClaim("user_type", "rider")));
 });
 
 // Add these lines
@@ -83,46 +104,85 @@ builder.Services.AddPricingInfrastructure(builder.Configuration);
 
 // Add Swagger
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 
 // Add Rate Limiting
+var isDev = builder.Environment.IsDevelopment();
+
 builder.Services.AddRateLimiter(options =>
 {
-    // Rate limit for OTP requests: 3 per 10 minutes per IP
     options.AddPolicy("otp", context =>
         RateLimitPartition.GetSlidingWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 3,
-                Window = TimeSpan.FromMinutes(10),
+                PermitLimit = isDev ? 100 : 3,
+                Window = isDev ? TimeSpan.FromMinutes(1) : TimeSpan.FromMinutes(10),
                 SegmentsPerWindow = 2
             }));
 
-    // Rate limit for login: 5 per 15 minutes per IP
     options.AddPolicy("login", context =>
         RateLimitPartition.GetSlidingWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(15),
+                PermitLimit = isDev ? 100 : 5,
+                Window = isDev ? TimeSpan.FromMinutes(1) : TimeSpan.FromMinutes(15),
                 SegmentsPerWindow = 3
             }));
 
-    // Rate limit for token refresh: 10 per minute per IP
     options.AddPolicy("refresh", context =>
         RateLimitPartition.GetSlidingWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = isDev ? 100 : 10,
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 2
             }));
 
-    options.RejectionStatusCode = 429; // Too Many Requests
+    options.RejectionStatusCode = 429;
+});
+
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",     // React dev server
+                "http://localhost:5173",     // Vite dev server
+                "http://localhost:8081",     // Expo/React Native web
+                "https://yourdomain.com")   // Production — update before deploy
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
 });
 
 
@@ -137,21 +197,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
-
-
-/**
-
-Now we need to apply these policies to the endpoints. Paste your endpoint files so I know the exact methods to add `.RequireRateLimiting()` to:
-```
-src / Modules / Users / RallyAPI.Users.Endpoints / Customers / SendOtp.cs
-src / Modules / Users / RallyAPI.Users.Endpoints / Admins / Login.cs
-src / Modules / Users / RallyAPI.Users.Endpoints / Restaurants / Login.cs
-src / Modules / Users / RallyAPI.Users.Endpoints / Riders / SendOtp.cs
-**/
 
 
 // Map endpoints
@@ -160,6 +209,33 @@ app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
 app.MapDeliveryModuleEndpoints();
 app.MapGet("/", () => "Rally API is running!");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = WriteHealthCheckResponse
+});
 
 app.Run();
 
+
+   static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+
+    var result = JsonSerializer.Serialize(new
+    {
+        status = report.Status.ToString(),
+        duration = report.TotalDuration.TotalMilliseconds + "ms",
+        checks = report.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            duration = e.Value.Duration.TotalMilliseconds + "ms",
+            error = e.Value.Exception?.Message
+        })
+    }, new JsonSerializerOptions { WriteIndented = true });
+
+    return context.Response.WriteAsync(result);
+
+
+
+}

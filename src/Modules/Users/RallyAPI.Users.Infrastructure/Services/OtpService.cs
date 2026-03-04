@@ -1,103 +1,6 @@
-﻿//using System.Collections.Concurrent;
-//using RallyAPI.Users.Application.Abstractions;
-
-//namespace RallyAPI.Users.Infrastructure.Services;
-
-//public class OtpService : IOtpService
-//{
-//    // In-memory store for MVP (use Redis in production)
-//    private static readonly ConcurrentDictionary<string, OtpEntry> _otpStore = new();
-
-//    // OTP validity duration
-//    private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(5);
-
-//    public Task<string> GenerateAndSendOtpAsync(string phoneNumber, CancellationToken cancellationToken = default)
-//    {
-//        // Generate 6-digit OTP
-//        var otp = GenerateOtp();
-
-//        // Store with expiration
-//        var entry = new OtpEntry
-//        {
-//            Otp = otp,
-//            ExpiresAt = DateTime.UtcNow.Add(OtpValidity),
-//            Attempts = 0
-//        };
-
-//        _otpStore.AddOrUpdate(phoneNumber, entry, (_, _) => entry);
-
-//        // TODO: In production, integrate with SMS provider (Twilio, MSG91, etc.)
-//        // For MVP, we just log to console
-//        Console.WriteLine($"========================================");
-//        Console.WriteLine($"[OTP SERVICE] Phone: {phoneNumber}");
-//        Console.WriteLine($"[OTP SERVICE] OTP: {otp}");
-//        Console.WriteLine($"[OTP SERVICE] Valid until: {entry.ExpiresAt:HH:mm:ss}");
-//        Console.WriteLine($"========================================");
-
-//        return Task.FromResult(otp);
-//    }
-
-//    public Task<bool> VerifyOtpAsync(string phoneNumber, string otp, CancellationToken cancellationToken = default)
-//    {
-//        // Check if OTP exists for this phone
-//        if (!_otpStore.TryGetValue(phoneNumber, out var entry))
-//        {
-//            Console.WriteLine($"[OTP SERVICE] No OTP found for {phoneNumber}");
-//            return Task.FromResult(false);
-//        }
-
-//        // Check if expired
-//        if (DateTime.UtcNow > entry.ExpiresAt)
-//        {
-//            _otpStore.TryRemove(phoneNumber, out _);
-//            Console.WriteLine($"[OTP SERVICE] OTP expired for {phoneNumber}");
-//            return Task.FromResult(false);
-//        }
-
-//        // Check attempt limit (prevent brute force)
-//        if (entry.Attempts >= 3)
-//        {
-//            _otpStore.TryRemove(phoneNumber, out _);
-//            Console.WriteLine($"[OTP SERVICE] Too many attempts for {phoneNumber}");
-//            return Task.FromResult(false);
-//        }
-
-//        // Increment attempts
-//        entry.Attempts++;
-
-//        // Verify OTP
-//        if (entry.Otp != otp)
-//        {
-//            Console.WriteLine($"[OTP SERVICE] Invalid OTP for {phoneNumber}. Attempt {entry.Attempts}/3");
-//            return Task.FromResult(false);
-//        }
-
-//        // Success - remove OTP (one-time use)
-//        _otpStore.TryRemove(phoneNumber, out _);
-//        Console.WriteLine($"[OTP SERVICE] OTP verified for {phoneNumber}");
-//        return Task.FromResult(true);
-//    }
-
-//    private static string GenerateOtp()
-//    {
-//        // For development/testing, use a fixed OTP
-//#if DEBUG
-//        return "123456";
-//#else
-//        var random = new Random();
-//        return random.Next(100000, 999999).ToString();
-//#endif
-//    }
-
-//    private class OtpEntry
-//    {
-//        public string Otp { get; set; } = string.Empty;
-//        public DateTime ExpiresAt { get; set; }
-//        public int Attempts { get; set; }
-//    }
-//}
-
+﻿
 using MediatR;
+using Microsoft.Extensions.Logging;
 using RallyAPI.Users.Application.Abstractions;
 using StackExchange.Redis;
 using System.Collections.Generic;
@@ -110,6 +13,8 @@ namespace RallyAPI.Users.Infrastructure.Services;
 public class OtpService : IOtpService
 {
     private readonly IDatabase _redis;
+    private readonly ILogger<OtpService> _logger;
+    private readonly ISmsService _smsService;
 
     // Configuration
     private const int OtpExpiryMinutes = 5;
@@ -118,9 +23,11 @@ public class OtpService : IOtpService
     private const int RateLimitPerPhone = 3;      // max 3 OTPs per phone per 10 min
     private const int RateLimitWindowMinutes = 10;
 
-    public OtpService(IConnectionMultiplexer redis)
+    public OtpService(IConnectionMultiplexer redis, ISmsService smsService, ILogger<OtpService> logger)
     {
         _redis = redis.GetDatabase();
+        _smsService = smsService;
+        _logger = logger;
     }
 
     public async Task<string> GenerateAndSendOtpAsync(
@@ -170,12 +77,20 @@ public class OtpService : IOtpService
         }
 
         // TODO: Send via SMS provider (Twilio/MSG91)
-        // For now, log to console
-        Console.WriteLine($"========================================");
-        Console.WriteLine($"[OTP SERVICE - REDIS] Phone: {phoneNumber}");
-        Console.WriteLine($"[OTP SERVICE - REDIS] OTP: {otp}");
-        Console.WriteLine($"[OTP SERVICE - REDIS] Expires in: {OtpExpiryMinutes} min");
-        Console.WriteLine($"========================================");
+        //// For now, log to console
+        //Console.WriteLine($"========================================");
+        //Console.WriteLine($"[OTP SERVICE - REDIS] Phone: {phoneNumber}");
+        //Console.WriteLine($"[OTP SERVICE - REDIS] OTP: {otp}");
+        //Console.WriteLine($"[OTP SERVICE - REDIS] Expires in: {OtpExpiryMinutes} min");
+        //Console.WriteLine($"========================================");
+
+        var message = $"{otp} is your OTP for Rally. Valid for 5 minutes. Do not share.";
+        var sent = await _smsService.SendAsync(phoneNumber, message, cancellationToken);
+
+        if (!sent)
+        {
+            _logger.LogError("Failed to send OTP SMS to {Phone}", phoneNumber);
+        }
 
         return otp;
     }
@@ -241,6 +156,16 @@ public class OtpService : IOtpService
         // Cryptographically secure random number
         return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
 #endif
+
+        //   var message = $"{otp} is your OTP for Rally. Valid for 5 minutes. Do not share.";
+        //   var sent = await _smsService.SendAsync(phone, message, cancellationToken);
+        //
+        //   if (!sent)
+        //   {
+        //       _logger.LogError("Failed to send OTP SMS to {Phone}", phone);
+        //       // Don't fail the operation — OTP is stored in Redis, user can retry
+        //       // In production, you might want to return an error here
+        //   }
     }
 
     private static string HashOtp(string otp)

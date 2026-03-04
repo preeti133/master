@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RallyAPI.Infrastructure.GoogleMaps.Models;
@@ -7,10 +8,13 @@ using RallyAPI.SharedKernel.Abstractions.Distance;
 namespace RallyAPI.Infrastructure.GoogleMaps;
 
 /// <summary>
-/// Google Maps Distance Matrix API implementation.
+/// Routes API — Compute Route Matrix implementation.
 /// </summary>
 public sealed class GoogleMapsDistanceCalculator : IDistanceCalculator
 {
+    private const string FieldMask =
+        "originIndex,destinationIndex,distanceMeters,duration,status,condition";
+
     private readonly HttpClient _httpClient;
     private readonly GoogleMapsOptions _options;
     private readonly ILogger<GoogleMapsDistanceCalculator> _logger;
@@ -40,67 +44,63 @@ public sealed class GoogleMapsDistanceCalculator : IDistanceCalculator
 
         try
         {
-            var origin = $"{originLat},{originLng}";
-            var destination = $"{destinationLat},{destinationLng}";
-
-            var url = $"{_options.BaseUrl}/distancematrix/json" +
-                      $"?origins={origin}" +
-                      $"&destinations={destination}" +
-                      $"&mode={_options.TravelMode}" +
-                      $"&region={_options.Region}" +
-                      $"&key={_options.ApiKey}";
+            var request = BuildRequest(
+                [RouteMatrixWaypointContainer.FromLatLng(originLat, originLng)],
+                [RouteMatrixWaypointContainer.FromLatLng(destinationLat, destinationLng)]);
 
             _logger.LogDebug(
                 "Requesting distance: ({OriginLat}, {OriginLng}) → ({DestLat}, {DestLng})",
                 originLat, originLng, destinationLat, destinationLng);
 
-            var response = await _httpClient.GetFromJsonAsync<DistanceMatrixResponse>(url, ct);
+            var elements = await SendRouteMatrixRequestAsync(request, ct);
 
-            if (response is null)
+            if (elements is null || elements.Count == 0)
             {
-                _logger.LogWarning("Google Maps returned null response");
-                return DistanceResult.Failure("Empty response from Google Maps");
+                _logger.LogWarning("Routes API returned empty response");
+                return DistanceResult.Failure("Empty response from Routes API");
             }
 
-            if (response.Status != "OK")
+            var element = elements[0];
+
+            if (element.Status is { Code: not 0 })
             {
                 _logger.LogWarning(
-                    "Google Maps API error: {Status} - {Message}",
-                    response.Status, response.ErrorMessage);
-                return DistanceResult.Failure(response.ErrorMessage ?? response.Status);
+                    "Routes API error: Code={Code} - {Message}",
+                    element.Status.Code, element.Status.Message);
+                return DistanceResult.Failure(element.Status.Message ?? $"Error code {element.Status.Code}");
             }
 
-            var element = response.Rows.FirstOrDefault()?.Elements.FirstOrDefault();
-
-            if (element is null || element.Status != "OK")
+            if (element.Condition != "ROUTE_EXISTS")
             {
-                _logger.LogWarning("No route found: {Status}", element?.Status);
-                return DistanceResult.Failure(element?.Status ?? "No route found");
+                _logger.LogWarning("No route found: {Condition}", element.Condition);
+                return DistanceResult.Failure(element.Condition ?? "No route found");
             }
+
+            var durationSeconds = ParseDuration(element.Duration);
 
             _logger.LogInformation(
-                "Distance calculated: {Distance}, {Duration}",
-                element.Distance?.Text, element.Duration?.Text);
+                "Distance calculated: {DistanceMeters}m, {DurationSeconds}s",
+                element.DistanceMeters, durationSeconds);
 
             return DistanceResult.Success(
-                distanceMeters: element.Distance!.Value,
-                durationSeconds: element.Duration!.Value,
-                distanceText: element.Distance.Text,
-                durationText: element.Duration.Text);
+                distanceMeters: element.DistanceMeters,
+                durationSeconds: durationSeconds,
+                distanceText: FormatDistance(element.DistanceMeters),
+                durationText: FormatDuration(durationSeconds));
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "HTTP error calling Google Maps API");
+            _logger.LogError(ex, "HTTP error calling Routes API");
             return GetHaversineFallback(originLat, originLng, destinationLat, destinationLng);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            _logger.LogError(ex, "Timeout calling Google Maps API");
+            _logger.LogError(ex, "Timeout calling Routes API");
             return GetHaversineFallback(originLat, originLng, destinationLat, destinationLng);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error calling Google Maps API");
+            _logger.LogError(ex, "Unexpected error calling Routes API");
             return GetHaversineFallback(originLat, originLng, destinationLat, destinationLng);
         }
     }
@@ -123,42 +123,40 @@ public sealed class GoogleMapsDistanceCalculator : IDistanceCalculator
 
         try
         {
-            var origin = $"{originLat},{originLng}";
-            var destinationsStr = string.Join("|", destinations.Select(d => $"{d.lat},{d.lng}"));
-
-            var url = $"{_options.BaseUrl}/distancematrix/json" +
-                      $"?origins={origin}" +
-                      $"&destinations={destinationsStr}" +
-                      $"&mode={_options.TravelMode}" +
-                      $"&region={_options.Region}" +
-                      $"&key={_options.ApiKey}";
+            var request = BuildRequest(
+                [RouteMatrixWaypointContainer.FromLatLng(originLat, originLng)],
+                destinations.Select(d => RouteMatrixWaypointContainer.FromLatLng(d.lat, d.lng)).ToList());
 
             _logger.LogDebug(
                 "Requesting distances to {Count} destinations",
                 destinations.Count);
 
-            var response = await _httpClient.GetFromJsonAsync<DistanceMatrixResponse>(url, ct);
+            var elements = await SendRouteMatrixRequestAsync(request, ct);
 
-            if (response?.Status != "OK" || !response.Rows.Any())
+            if (elements is null || elements.Count == 0)
             {
-                _logger.LogWarning("Google Maps batch request failed, using fallback");
+                _logger.LogWarning("Routes API batch request failed, using fallback");
                 return destinations
                     .Select(d => GetHaversineFallback(originLat, originLng, d.lat, d.lng))
                     .ToList();
             }
 
-            var results = new List<DistanceResult>();
-            var elements = response.Rows[0].Elements;
+            // Index results by destinationIndex for correct ordering
+            var elementsByDest = elements.ToDictionary(e => e.DestinationIndex);
 
+            var results = new List<DistanceResult>();
             for (int i = 0; i < destinations.Count; i++)
             {
-                if (i < elements.Count && elements[i].Status == "OK")
+                if (elementsByDest.TryGetValue(i, out var el)
+                    && el.Condition == "ROUTE_EXISTS"
+                    && el.Status is null or { Code: 0 })
                 {
+                    var durationSeconds = ParseDuration(el.Duration);
                     results.Add(DistanceResult.Success(
-                        distanceMeters: elements[i].Distance!.Value,
-                        durationSeconds: elements[i].Duration!.Value,
-                        distanceText: elements[i].Distance.Text,
-                        durationText: elements[i].Duration.Text));
+                        distanceMeters: el.DistanceMeters,
+                        durationSeconds: durationSeconds,
+                        distanceText: FormatDistance(el.DistanceMeters),
+                        durationText: FormatDuration(durationSeconds)));
                 }
                 else
                 {
@@ -177,6 +175,63 @@ public sealed class GoogleMapsDistanceCalculator : IDistanceCalculator
                 .Select(d => GetHaversineFallback(originLat, originLng, d.lat, d.lng))
                 .ToList();
         }
+    }
+
+    // ── Helpers ─────────────────────────────────────────────
+
+    private RouteMatrixRequest BuildRequest(
+        List<RouteMatrixWaypointContainer> origins,
+        List<RouteMatrixWaypointContainer> destinations) =>
+        new()
+        {
+            Origins = origins,
+            Destinations = destinations,
+            TravelMode = _options.TravelMode
+        };
+
+    private async Task<List<RouteMatrixElement>?> SendRouteMatrixRequestAsync(
+        RouteMatrixRequest body,
+        CancellationToken ct)
+    {
+        var url = $"{_options.BaseUrl}/distanceMatrix:compute";
+
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(body)
+        };
+
+        httpRequest.Headers.Add("X-Goog-Api-Key", _options.ApiKey);
+        httpRequest.Headers.Add("X-Goog-FieldMask", FieldMask);
+
+        var response = await _httpClient.SendAsync(httpRequest, ct);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<List<RouteMatrixElement>>(
+            cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// Parse protobuf Duration string (e.g. "567s") to integer seconds.
+    /// </summary>
+    private static int ParseDuration(string? duration)
+    {
+        if (string.IsNullOrEmpty(duration))
+            return 0;
+
+        var span = duration.AsSpan().TrimEnd('s');
+        return int.TryParse(span, out var seconds) ? seconds : 0;
+    }
+
+    private static string FormatDistance(int meters)
+    {
+        var km = meters / 1000.0;
+        return $"{km:F1} km";
+    }
+
+    private static string FormatDuration(int seconds)
+    {
+        var minutes = (int)Math.Ceiling(seconds / 60.0);
+        return minutes < 60 ? $"{minutes} mins" : $"{minutes / 60}h {minutes % 60}m";
     }
 
     /// <summary>
@@ -214,4 +269,4 @@ public sealed class GoogleMapsDistanceCalculator : IDistanceCalculator
     }
 
     private static double ToRadians(double degrees) => degrees * Math.PI / 180;
-}   
+}

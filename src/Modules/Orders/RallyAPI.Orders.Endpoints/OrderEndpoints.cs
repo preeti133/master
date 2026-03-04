@@ -110,7 +110,7 @@ public static class OrderEndpoints
         group.MapPut("/{orderId:guid}/assign-rider", AssignRider)
             .WithName("AssignRider")
             .WithSummary("Assign a rider to the order")
-            .RequireAuthorization("Admin", "Restaurant")
+            .RequireAuthorization("AdminOrRestaurant")
             .Produces<OrderDto>()
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
 
@@ -118,7 +118,7 @@ public static class OrderEndpoints
         group.MapPut("/{orderId:guid}/pickup", MarkPickedUp)
             .WithName("MarkPickedUp")
             .WithSummary("Mark order as picked up by rider")
-            .RequireAuthorization("Rider")
+            .RequireAuthorization("AdminOrRider")
             .Produces<OrderDto>()
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
 
@@ -126,7 +126,7 @@ public static class OrderEndpoints
         group.MapPut("/{orderId:guid}/deliver", MarkDelivered)
             .WithName("MarkDelivered")
             .WithSummary("Mark order as delivered")
-            .RequireAuthorization("Rider")
+            .RequireAuthorization("AdminOrRider")
             .Produces<OrderDto>()
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
 

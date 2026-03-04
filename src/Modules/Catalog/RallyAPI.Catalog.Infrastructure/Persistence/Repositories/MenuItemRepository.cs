@@ -22,7 +22,7 @@ internal sealed class MenuItemRepository : IMenuItemRepository
     {
         return await _context.MenuItems
             .Include(m => m.Options)
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
+            .FirstOrDefaultAsync(m => m.MenuId == id, ct);
     }
 
     public async Task<List<MenuItem>> GetByMenuIdAsync(Guid menuId, CancellationToken ct = default)
@@ -42,6 +42,21 @@ internal sealed class MenuItemRepository : IMenuItemRepository
             .OrderBy(m => m.DisplayOrder)
             .ToListAsync(ct);
     }
+
+    public async Task<List<MenuItem>> SearchAsync(string query, int maxResults = 20, CancellationToken ct = default)
+    {
+        var searchTerm = $"%{query}%";
+
+        return await _context.MenuItems
+            .Include(m => m.Options)
+            .Where(m => m.IsAvailable &&
+                (EF.Functions.ILike(m.Name, searchTerm) ||
+                 (m.Description != null && EF.Functions.ILike(m.Description, searchTerm))))
+            .OrderBy(m => m.Name)
+            .Take(maxResults)
+            .ToListAsync(ct);
+    }
+
 
     public void Add(MenuItem item) => _context.MenuItems.Add(item);
 
