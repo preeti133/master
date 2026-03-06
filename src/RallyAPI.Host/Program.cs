@@ -214,7 +214,45 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     ResponseWriter = WriteHealthCheckResponse
 });
 
+// Auto-run migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        var usersDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Users.Infrastructure.Persistence.UsersDbContext>();
+        logger.LogInformation("Migrating Users database...");
+        usersDb.Database.Migrate();
+
+        var catalogDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Catalog.Infrastructure.Persistence.CatalogDbContext>();
+        logger.LogInformation("Migrating Catalog database...");
+        catalogDb.Database.Migrate();
+
+        var ordersDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Orders.Infrastructure.OrdersDbContext>();
+        logger.LogInformation("Migrating Orders database...");
+        ordersDb.Database.Migrate();
+
+        var deliveryDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Delivery.Infrastructure.Persistence.DeliveryDbContext>();
+        logger.LogInformation("Migrating Delivery database...");
+        deliveryDb.Database.Migrate();
+
+        var pricingDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Pricing.Infrastructure.Persistence.PricingDbContext>();
+        logger.LogInformation("Migrating Pricing database...");
+        pricingDb.Database.Migrate();
+
+        logger.LogInformation("All migrations completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database.");
+        throw;
+    }
+}
+
 app.Run();
+
+
 
 
    static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
