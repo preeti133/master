@@ -135,5 +135,14 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
 
         // Ignore domain events
         builder.Ignore(r => r.DomainEvents);
+
+
+        builder.Property(e => e.LogoUrl)
+       .HasColumnName("logo_url")
+       .HasMaxLength(500);
+
+        builder.Property(e => e.LogoFileKey)
+               .HasColumnName("logo_file_key")
+               .HasMaxLength(500);
     }
 }

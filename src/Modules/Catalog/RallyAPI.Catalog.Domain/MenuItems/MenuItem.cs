@@ -100,4 +100,17 @@ public class MenuItem : AggregateRoot
     {
         _options.Clear();
     }
+
+    /// <summary>
+    /// Updates the menu item's image URL after a successful R2 upload confirmation.
+    /// Called by ConfirmMenuItemImageCommandHandler after validating the upload.
+    /// </summary>
+    public void UpdateImageUrl(string imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            throw new ArgumentException("Image URL cannot be empty.", nameof(imageUrl));
+
+        ImageUrl = imageUrl;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

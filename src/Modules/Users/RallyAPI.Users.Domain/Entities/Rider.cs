@@ -29,6 +29,10 @@ public sealed class Rider : AggregateRoot
     /// </summary>
     public DateTime? CurrentDeliveryAssignedAt { get; private set; }
 
+    private readonly List<RiderKycDocument> _kycDocuments = [];
+    public IReadOnlyList<RiderKycDocument> KycDocuments => _kycDocuments.AsReadOnly();
+
+
     // EF Core
     private Rider() { }
 
@@ -251,36 +255,20 @@ public sealed class Rider : AggregateRoot
             && !CurrentDeliveryId.HasValue;
     }
 
-    ///// <summary>
-    ///// Updates rider's current location.
-    ///// </summary>
-    ///// <param name="latitude">Current latitude</param>
-    ///// <param name="longitude">Current longitude</param>
-    ///// <returns>Success or failure</returns>
-    //public Result UpdateLocation(decimal latitude, decimal longitude)
-    //{
-    //    if (!IsOnline)
-    //        return Result.Failure(Error.Validation(
-    //            "Rider.NotOnline",
-    //            "Cannot update location while offline."));
+    public RiderKycDocument AddOrReplaceKycDocument(
+    RiderKycDocumentType documentType,
+    string fileKey,
+    string publicUrl)
+    {
+        // Remove existing document of same type if present
+        var existing = _kycDocuments.FirstOrDefault(d => d.DocumentType == documentType);
+        if (existing is not null)
+            _kycDocuments.Remove(existing);
 
-    //    // Basic validation
-    //    if (latitude < -90 || latitude > 90)
-    //        return Result.Failure(Error.Validation(
-    //            "Rider.InvalidLatitude",
-    //            "Latitude must be between -90 and 90."));
+        var document = RiderKycDocument.Create(Id, documentType, fileKey, publicUrl);
+        _kycDocuments.Add(document);
+        UpdatedAt = DateTime.UtcNow;
 
-    //    if (longitude < -180 || longitude > 180)
-    //        return Result.Failure(Error.Validation(
-    //            "Rider.InvalidLongitude",
-    //            "Longitude must be between -180 and 180."));
-
-    //    CurrentLatitude = latitude;
-    //    CurrentLongitude = longitude;
-    //    LastLocationUpdate = DateTime.UtcNow;
-
-    //    MarkAsUpdated();
-
-    //    return Result.Success();
-    //}
+        return document;
+    }
 }

@@ -31,7 +31,6 @@ builder.Services.AddUsersModule(builder.Configuration);
 // Add Catalog Module
 builder.Services.AddCatalogModule(builder.Configuration);
 
-// Add Order Module
 builder.Services.AddOrdersModule(builder.Configuration);
 
 // Add ProRouting Integration
@@ -95,6 +94,15 @@ builder.Services.AddAuthorization(options =>
     policy.RequireAssertion(ctx =>
         ctx.User.HasClaim("user_type", "admin") ||
         ctx.User.HasClaim("user_type", "rider")));
+    options.AddPolicy("RestaurantOrAdmin", policy =>
+    policy.RequireAssertion(ctx =>
+        ctx.User.HasClaim("user_type", "restaurant") ||
+        ctx.User.HasClaim("user_type", "admin")));
+
+    options.AddPolicy("RiderOrAdmin", policy =>
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim("user_type", "rider") ||
+            ctx.User.HasClaim("user_type", "admin")));
 });
 
 // Add these lines
@@ -184,6 +192,8 @@ builder.Services.AddCors(options =>
             .AllowCredentials();
     });
 });
+
+
 
 
 var app = builder.Build();

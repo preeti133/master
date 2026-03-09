@@ -10,6 +10,6 @@ public interface IMenuItemRepository
     Task<List<MenuItem>> GetByRestaurantIdAsync(Guid restaurantId, CancellationToken ct = default);
     Task<List<MenuItem>> SearchAsync(string query, int maxResults = 20, CancellationToken ct = default);
     void Add(MenuItem item);
-    void Update(MenuItem item);
+    void Update(MenuItem item, CancellationToken ct = default);
     void Delete(MenuItem item);
 }

@@ -186,4 +186,5 @@ C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\HealthCheck
 C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\Microsoft.Extensions.Diagnostics.HealthChecks.dll
 C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions.dll
 C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\Microsoft.Extensions.Hosting.Abstractions.dll
-C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
+C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\AWSSDK.Core.dll
+C:\Users\vishw\source\repos\Rally\src\RallyAPI.Host\bin\Debug\net8.0\AWSSDK.S3.dll

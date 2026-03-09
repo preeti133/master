@@ -4,6 +4,10 @@
     <ProjectReference Include="..\..\..\RallyAPI.SharedKernel\RallyAPI.SharedKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Repositories\" />
+  </ItemGroup>
+
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
