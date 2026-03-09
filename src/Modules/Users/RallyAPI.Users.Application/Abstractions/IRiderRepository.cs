@@ -10,5 +10,5 @@ public interface IRiderRepository
     Task<bool> ExistsByPhoneAsync(PhoneNumber phone, CancellationToken cancellationToken = default);
     Task<List<Rider>> GetOnlineRidersAsync(CancellationToken cancellationToken = default);
     Task AddAsync(Rider rider, CancellationToken cancellationToken = default);
-    void Update(Rider rider);
+    void Update(Rider rider, CancellationToken cancellationToken = default);
 }

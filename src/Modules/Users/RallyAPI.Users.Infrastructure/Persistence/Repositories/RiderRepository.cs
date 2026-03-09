@@ -44,8 +44,9 @@ public class RiderRepository : IRiderRepository
         await _context.Riders.AddAsync(rider, cancellationToken);
     }
 
-    public void Update(Rider rider)
+    public void Update(Rider rider, CancellationToken cancellationToken = default)
     {
         _context.Riders.Update(rider);
     }
+
 }

@@ -1,20 +1,22 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using RallyAPI.Users.Application.Customers.Commands.UpdateProfile;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Builder;
 
 namespace RallyAPI.Users.Endpoints.Customers;
 
 public class UpdateProfile : IEndpoint
 {
+
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapPut("/api/customers/profile", HandleAsync)
             .WithName("CustomerUpdateProfile")
             .WithTags("Customers")
             .RequireAuthorization("Customer");
+
     }
 
     public record UpdateCustomerProfileRequest(string? Name, string? Email);

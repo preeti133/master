@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RallyAPI.Infrastructure.GoogleMaps;
+using RallyAPI.Infrastructure.Storage;
 using RallyAPI.SharedKernel.Abstractions.Distance;
 
 namespace RallyAPI.Infrastructure;
@@ -20,6 +21,8 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(
                 configuration.GetValue<int>("GoogleMaps:TimeoutSeconds", 10));
         });
+
+        services.AddStorageServices(configuration);
 
         return services;
     }

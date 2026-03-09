@@ -9,5 +9,5 @@ public interface IRestaurantRepository
     Task<Restaurant?> GetByEmailAsync(Email email, CancellationToken cancellationToken = default);
     Task<bool> ExistsByEmailAsync(Email email, CancellationToken cancellationToken = default);
     Task AddAsync(Restaurant restaurant, CancellationToken cancellationToken = default);
-    void Update(Restaurant restaurant);
+    void Update(Restaurant restaurant, CancellationToken cancellationToken = default);
 }

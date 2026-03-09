@@ -60,7 +60,7 @@ internal sealed class MenuItemRepository : IMenuItemRepository
 
     public void Add(MenuItem item) => _context.MenuItems.Add(item);
 
-    public void Update(MenuItem item) => _context.MenuItems.Update(item);
+    public void Update(MenuItem item, CancellationToken ct = default) => _context.MenuItems.Update(item);
 
     public void Delete(MenuItem item) => _context.MenuItems.Remove(item);
 }

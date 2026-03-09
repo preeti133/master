@@ -19,6 +19,8 @@ public sealed class Restaurant : AggregateRoot
     public TimeOnly OpeningTime { get; private set; }
     public TimeOnly ClosingTime { get; private set; }
     public decimal CommissionPercentage { get; private set; }
+    public string? LogoUrl { get; private set; }
+    public string? LogoFileKey { get; private set; }  // ← add this
 
     // EF Core
     private Restaurant() { }
@@ -183,4 +185,12 @@ public sealed class Restaurant : AggregateRoot
         var now = TimeOnly.FromDateTime(DateTime.Now);
         return IsActive && IsAcceptingOrders && now >= OpeningTime && now <= ClosingTime;
     }
+
+    public void UpdateLogoUrl(string logoUrl, string fileKey)
+    {
+        LogoUrl = logoUrl;
+        LogoFileKey = fileKey;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
 }

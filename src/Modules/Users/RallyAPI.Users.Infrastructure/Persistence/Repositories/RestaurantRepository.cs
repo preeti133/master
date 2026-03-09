@@ -37,7 +37,7 @@ public class RestaurantRepository : IRestaurantRepository
         await _context.Restaurants.AddAsync(restaurant, cancellationToken);
     }
 
-    public void Update(Restaurant restaurant)
+    public void Update(Restaurant restaurant, CancellationToken cancellationToken = default)
     {
         _context.Restaurants.Update(restaurant);
     }
