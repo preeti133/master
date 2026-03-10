@@ -4,9 +4,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RallyAPI.Orders.Application.Abstractions;
 using RallyAPI.Orders.Domain.Abstractions;
+using RallyAPI.Orders.Domain.Repositories;
 using RallyAPI.Orders.Infrastructure.BackgroundServices;
+using RallyAPI.Orders.Infrastructure.Persistence.Repositories;
 using RallyAPI.Orders.Infrastructure.Repositories;
 using RallyAPI.Orders.Infrastructure.Services;
+using RallyAPI.Orders.Application.Abstractions;
+using RallyAPI.Orders.Infrastructure.Services.PayU;
 
 namespace RallyAPI.Orders.Infrastructure;
 
@@ -36,6 +40,11 @@ public static class DependencyInjection
 
             options.AddInterceptors(sp.GetRequiredService<ISaveChangesInterceptor>());
         });
+
+        // PayU
+        services.Configure<PayUOptions>(configuration.GetSection(PayUOptions.SectionName));
+        services.AddHttpClient<IPayUService, PayUService>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
 
         // Auto-cancel background service (two-stage: escalate → cancel)
         services.Configure<AutoCancelOptions>(

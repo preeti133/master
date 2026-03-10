@@ -42,6 +42,10 @@ public sealed class OrderRepository : IOrderRepository
     {
         _context.Orders.Update(order);
     }
+    public void Update(Order order, CancellationToken cancellationToken = default)
+    {
+        _context.Orders.Update(order);
+    }
 
     public void Remove(Order order)
     {

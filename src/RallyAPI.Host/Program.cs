@@ -224,6 +224,7 @@ app.UseAuthorization();
 app.MapUsersEndpoints();
 app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
+app.MapPaymentEndpoints();
 app.MapDeliveryModuleEndpoints();
 app.MapGet("/", () => "Rally API is running!");
 app.MapHealthChecks("/health", new HealthCheckOptions
