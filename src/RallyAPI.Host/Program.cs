@@ -193,7 +193,7 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",     // React dev server
                 "http://localhost:5173",     // Vite dev server
                 "http://localhost:8081",     // Expo/React Native web
-                "https://yourdomain.com")   // Production — update before deploy
+                "https://hivago.vercel.app")   // Production — update before deploy
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
