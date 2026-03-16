@@ -18,9 +18,11 @@ public class JwtProvider : IJwtProvider
     {
         _settings = settings.Value;
 
-        // Load private key once at startup
+        // Load private key once at startup — prefer PEM string (Railway env var) over file path
         _privateKey = RSA.Create();
-        var keyText = File.ReadAllText(_settings.PrivateKeyPath);
+        var keyText = !string.IsNullOrWhiteSpace(_settings.PrivateKeyPem)
+            ? _settings.PrivateKeyPem.Replace("\\n", "\n")
+            : File.ReadAllText(_settings.PrivateKeyPath);
         _privateKey.ImportFromPem(keyText);
     }
 

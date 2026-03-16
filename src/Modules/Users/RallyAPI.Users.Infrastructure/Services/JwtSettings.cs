@@ -10,4 +10,16 @@ public class JwtSettings
     public int RefreshTokenExpirationDays { get; set; } = 30;
     public string PrivateKeyPath { get; set; } = string.Empty;
     public string PublicKeyPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Raw PEM content of the private key.
+    /// When set (e.g. via Railway env var JwtSettings__PrivateKeyPem), takes priority over PrivateKeyPath.
+    /// </summary>
+    public string PrivateKeyPem { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Raw PEM content of the public key.
+    /// When set (e.g. via Railway env var JwtSettings__PublicKeyPem), takes priority over PublicKeyPath.
+    /// </summary>
+    public string PublicKeyPem { get; set; } = string.Empty;
 }
