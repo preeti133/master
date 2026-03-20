@@ -1,13 +1,14 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
+using RallyAPI.SharedKernel.Results;
 using System.Text.Json;
 
 namespace RallyAPI.SharedKernel.Middleware;
 
 /// <summary>
 /// Global exception handling middleware.
-/// Catches unhandled exceptions and returns consistent JSON error responses.
+/// Catches unhandled exceptions and returns a consistent <see cref="ApiErrorResponse"/> JSON body.
+/// Never leaks stack traces or internal exception details to clients.
 /// </summary>
 public sealed class ExceptionHandlingMiddleware
 {
@@ -16,12 +17,11 @@ public sealed class ExceptionHandlingMiddleware
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    public ExceptionHandlingMiddleware(
-        RequestDelegate next,
-        ILogger<ExceptionHandlingMiddleware> logger)
+    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
     {
         _next = next;
         _logger = logger;
@@ -43,38 +43,32 @@ public sealed class ExceptionHandlingMiddleware
     {
         var traceId = context.TraceIdentifier;
 
-        // Log with structured data
         _logger.LogError(
             exception,
-            "Unhandled exception occurred. TraceId: {TraceId}, Path: {Path}, Method: {Method}",
+            "Unhandled exception. TraceId: {TraceId}, Path: {Path}, Method: {Method}",
             traceId,
             context.Request.Path,
             context.Request.Method);
 
-        // Determine status code and message based on exception type
-        var (statusCode, message) = exception switch
+        var (statusCode, errorCode, message) = exception switch
         {
-            ArgumentNullException => (StatusCodes.Status400BadRequest, "Invalid request parameters"),
-            ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
-            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
-            KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
-            OperationCanceledException => (StatusCodes.Status499ClientClosedRequest, "Request cancelled"),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred")
+            ArgumentNullException  => (StatusCodes.Status400BadRequest,  "BadRequest",   "Invalid request parameters."),
+            ArgumentException      => (StatusCodes.Status400BadRequest,  "BadRequest",   "Invalid request."),
+            UnauthorizedAccessException
+                                   => (StatusCodes.Status401Unauthorized,"Unauthorized", "Unauthorized."),
+            KeyNotFoundException   => (StatusCodes.Status404NotFound,    "NotFound",     "Resource not found."),
+            OperationCanceledException
+                                   => (499,                              "Cancelled",    "Request cancelled."),
+            _                      => (StatusCodes.Status500InternalServerError, "InternalError", "An unexpected error occurred.")
         };
 
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
 
-        var errorResponse = new ErrorResponse(
-            Error: message,
-            TraceId: traceId,
-            Timestamp: DateTimeOffset.UtcNow);
+        // TraceId in the response so clients can report it without needing stack traces
+        var response = new ApiErrorResponse(errorCode, message,
+            new[] { new FieldError("traceId", traceId) });
 
-        await context.Response.WriteAsJsonAsync(errorResponse, JsonOptions);
+        await context.Response.WriteAsJsonAsync(response, JsonOptions);
     }
-
-    private sealed record ErrorResponse(
-        string Error,
-        string TraceId,
-        DateTimeOffset Timestamp);
 }
