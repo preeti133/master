@@ -23,6 +23,16 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Serialize enums as strings in all HTTP responses (minimal API + TypedResults)
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
 builder.Services.AddHttpContextAccessor();
 
 // SignalR
@@ -262,6 +272,7 @@ app.UseAuthorization();
 app.MapUsersEndpoints();
 app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
+app.MapCartEndpoints();
 app.MapPaymentEndpoints();
 app.MapDeliveryModuleEndpoints();
 app.MapHub<NotificationHub>("/hubs/notifications");

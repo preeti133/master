@@ -3,14 +3,15 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RallyAPI.Orders.Application.Abstractions;
+using RallyAPI.Orders.Application.Cart.Abstractions;
 using RallyAPI.Orders.Domain.Abstractions;
 using RallyAPI.Orders.Domain.Repositories;
 using RallyAPI.Orders.Infrastructure.BackgroundServices;
 using RallyAPI.Orders.Infrastructure.Persistence.Repositories;
 using RallyAPI.Orders.Infrastructure.Repositories;
 using RallyAPI.Orders.Infrastructure.Services;
-using RallyAPI.Orders.Application.Abstractions;
 using RallyAPI.Orders.Infrastructure.Services.PayU;
+using StackExchange.Redis;
 
 namespace RallyAPI.Orders.Infrastructure;
 
@@ -53,6 +54,13 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<ICartRepository, CartRepository>();
+
+        // Cart Cache (Redis write-through)
+        services.AddScoped<ICartCacheService, RedisCartCacheService>();
+
+        // Cart cleanup background service
+        services.AddHostedService<CartCleanupService>();
 
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();

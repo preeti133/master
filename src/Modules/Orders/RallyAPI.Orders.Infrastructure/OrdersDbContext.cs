@@ -17,6 +17,8 @@ public sealed class OrdersDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<DeliveryInfo> DeliveryInfos => Set<DeliveryInfo>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
