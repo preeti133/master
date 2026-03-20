@@ -41,4 +41,9 @@ public class RestaurantRepository : IRestaurantRepository
     {
         _context.Restaurants.Update(restaurant);
     }
+
+    public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Restaurants.CountAsync(cancellationToken);
+    }
 }

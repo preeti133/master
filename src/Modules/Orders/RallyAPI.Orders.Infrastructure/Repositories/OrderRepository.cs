@@ -151,6 +151,26 @@ public sealed class OrderRepository : IOrderRepository
             .CountAsync(o => o.RestaurantId == restaurantId, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Order>> GetEscalatedAsync(
+        int skip = 0,
+        int take = 20,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.DeliveryInfo)
+            .Where(o => o.IsEscalated)
+            .OrderByDescending(o => o.EscalatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountEscalatedAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Orders.CountAsync(o => o.IsEscalated, cancellationToken);
+    }
+
     public async Task<int> GetActiveOrdersCountAsync(CancellationToken cancellationToken = default)
     {
         var activeStatuses = new[]

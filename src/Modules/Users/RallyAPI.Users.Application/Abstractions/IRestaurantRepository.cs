@@ -10,4 +10,5 @@ public interface IRestaurantRepository
     Task<bool> ExistsByEmailAsync(Email email, CancellationToken cancellationToken = default);
     Task AddAsync(Restaurant restaurant, CancellationToken cancellationToken = default);
     void Update(Restaurant restaurant, CancellationToken cancellationToken = default);
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
 }

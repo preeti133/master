@@ -11,6 +11,7 @@ using RallyAPI.Orders.Infrastructure.Persistence.Repositories;
 using RallyAPI.Orders.Infrastructure.Repositories;
 using RallyAPI.Orders.Infrastructure.Services;
 using RallyAPI.Orders.Infrastructure.Services.PayU;
+using RallyAPI.SharedKernel.Abstractions.Orders;
 using StackExchange.Redis;
 
 namespace RallyAPI.Orders.Infrastructure;
@@ -64,6 +65,9 @@ public static class DependencyInjection
 
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Cross-module stats service (consumed by admin stats query via SharedKernel abstraction)
+        services.AddScoped<IOrderStatsService, OrderStatsService>();
 
         // Services
         services.AddScoped<IOrderNumberGenerator, OrderNumberGenerator>();

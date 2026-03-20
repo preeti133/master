@@ -39,6 +39,21 @@ public class RiderRepository : IRiderRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<Rider?> GetByIdWithKycAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Riders
+            .Include(r => r.KycDocuments)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+    }
+
+    public async Task<int> CountAsync(bool? isOnline = null, CancellationToken cancellationToken = default)
+    {
+        var query = _context.Riders.AsQueryable();
+        if (isOnline.HasValue)
+            query = query.Where(r => r.IsOnline == isOnline.Value && r.IsActive);
+        return await query.CountAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Rider rider, CancellationToken cancellationToken = default)
     {
         await _context.Riders.AddAsync(rider, cancellationToken);

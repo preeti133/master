@@ -49,6 +49,13 @@ public interface IOrderRepository
     DateTime olderThan,
     CancellationToken cancellationToken = default);
 
+    // Escalated orders (admin view)
+    Task<IReadOnlyList<Order>> GetEscalatedAsync(
+        int skip = 0,
+        int take = 20,
+        CancellationToken cancellationToken = default);
+    Task<int> CountEscalatedAsync(CancellationToken cancellationToken = default);
+
     // Counts
     Task<int> GetCountByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<int> GetCountByRestaurantIdAsync(Guid restaurantId, CancellationToken cancellationToken = default);
