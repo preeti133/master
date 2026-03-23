@@ -241,9 +241,14 @@ public static class OrderEndpoints
     private static async Task<IResult> GetOrderById(
         Guid orderId,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new GetOrderByIdQuery(orderId), cancellationToken);
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var callerRole = GetCallerRole(currentUser);
+        var result = await mediator.Send(new GetOrderByIdQuery(orderId, currentUser.UserId.Value, callerRole), cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
@@ -253,9 +258,14 @@ public static class OrderEndpoints
     private static async Task<IResult> GetOrderByNumber(
         string orderNumber,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new GetOrderByNumberQuery(orderNumber), cancellationToken);
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var callerRole = GetCallerRole(currentUser);
+        var result = await mediator.Send(new GetOrderByNumberQuery(orderNumber, currentUser.UserId.Value, callerRole), cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
@@ -475,6 +485,15 @@ public static class OrderEndpoints
     }
 
     #endregion
+
+    private static string GetCallerRole(ICurrentUserService currentUser)
+    {
+        if (currentUser.IsAdmin) return "Admin";
+        if (currentUser.IsRestaurant) return "Restaurant";
+        if (currentUser.IsRider) return "Rider";
+        if (currentUser.IsCustomer) return "Customer";
+        return string.Empty;
+    }
 
     private static async Task<IResult> RejectOrder(
     Guid orderId,
