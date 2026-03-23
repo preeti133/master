@@ -5,13 +5,12 @@ using RallyAPI.Orders.Domain.ValueObjects;
 namespace RallyAPI.Orders.Infrastructure.Services;
 
 /// <summary>
-/// Generates unique human-readable order numbers.
-/// Uses database sequence for uniqueness guarantee.
+/// Generates unique human-readable order numbers using a Postgres sequence.
+/// Format: ORD-{YYYYMMDD}-{SEQUENCE:D5}
 /// </summary>
 public sealed class OrderNumberGenerator : IOrderNumberGenerator
 {
     private readonly OrdersDbContext _context;
-    private static int _fallbackCounter;
 
     public OrderNumberGenerator(OrdersDbContext context)
     {
@@ -22,15 +21,18 @@ public sealed class OrderNumberGenerator : IOrderNumberGenerator
     {
         try
         {
-            // Try to get sequence from database
             var today = DateTime.UtcNow.Date;
-            var datePrefix = today.ToString("yyyyMMdd");
 
-            // Get today's count
-            var todayCount = await _context.Orders
-                .CountAsync(o => o.CreatedAt.Date == today, cancellationToken);
+            // Use Postgres sequence for atomic, concurrency-safe generation
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken);
 
-            var sequence = todayCount + 1;
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT nextval('orders.order_number_seq')";
+
+            var result = await cmd.ExecuteScalarAsync(cancellationToken);
+            var sequence = Convert.ToInt32(result);
 
             return OrderNumber.Create(sequence, today);
         }
