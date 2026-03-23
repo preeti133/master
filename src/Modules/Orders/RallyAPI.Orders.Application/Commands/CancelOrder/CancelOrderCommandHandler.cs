@@ -35,6 +35,15 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
             return Result.Failure<OrderDto>(OrderErrors.NotFound(command.OrderId));
         }
 
+        // Only the customer who placed the order or an Admin can cancel
+        var isAuthorized = command.CallerRole == "Admin"
+            || (command.CallerRole == "Customer" && order.CustomerId == command.CancelledBy);
+
+        if (!isAuthorized)
+        {
+            return Result.Failure<OrderDto>(OrderErrors.Unauthorized);
+        }
+
         if (!order.Status.CanBeCancelled())
         {
             return Result.Failure<OrderDto>(OrderErrors.CannotCancelInStatus(order.Status.GetDisplayName()));

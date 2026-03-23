@@ -368,7 +368,7 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.Preparing,
             ActorId = currentUser.UserId,
-            ActorRole = "Restaurant"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
@@ -389,7 +389,7 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.ReadyForPickup,
             ActorId = currentUser.UserId,
-            ActorRole = "Restaurant"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
@@ -403,6 +403,7 @@ public static class OrderEndpoints
         Guid orderId,
         [FromBody] AssignRiderRequest request,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
         var command = new AssignRiderCommand
@@ -410,7 +411,9 @@ public static class OrderEndpoints
             OrderId = orderId,
             RiderId = request.RiderId,
             RiderName = request.RiderName,
-            RiderPhone = request.RiderPhone
+            RiderPhone = request.RiderPhone,
+            AssignedById = currentUser.UserId,
+            AssignedByRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
@@ -431,7 +434,7 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.PickedUp,
             ActorId = currentUser.UserId,
-            ActorRole = "Rider"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
@@ -452,7 +455,7 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.Delivered,
             ActorId = currentUser.UserId,
-            ActorRole = "Rider"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
@@ -473,6 +476,7 @@ public static class OrderEndpoints
         {
             OrderId = orderId,
             CancelledBy = currentUser.UserId ?? Guid.Empty,
+            CallerRole = GetCallerRole(currentUser),
             Reason = request.Reason,
             Notes = request.Notes
         };
