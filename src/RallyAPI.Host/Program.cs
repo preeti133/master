@@ -94,6 +94,10 @@ else
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Prevent .NET from remapping "sub" → ClaimTypes.NameIdentifier etc.
+        // This keeps JWT claim names as-is so FindFirst("sub") works everywhere.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -102,7 +106,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new RsaSecurityKey(rsa)
+            IssuerSigningKey = new RsaSecurityKey(rsa),
+            RoleClaimType = "role",
+            NameClaimType = "sub"
         };
 
         // SignalR WebSocket upgrade: bearer token comes via query string

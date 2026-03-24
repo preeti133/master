@@ -24,7 +24,7 @@ public class ToggleMenuItemAvailability : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new ToggleMenuItemAvailabilityCommand(itemId, restaurantId);
         var result = await sender.Send(command, ct);

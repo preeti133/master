@@ -23,7 +23,7 @@ public class GetAdminStats : IEndpoint
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var adminId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var adminId = Guid.Parse(user.FindFirstValue("sub")!);
         var result = await sender.Send(new GetAdminStatsQuery(adminId), cancellationToken);
 
         return result.IsFailure

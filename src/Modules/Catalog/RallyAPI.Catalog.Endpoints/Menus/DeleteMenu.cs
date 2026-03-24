@@ -24,7 +24,7 @@ public class DeleteMenu : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new DeleteMenuCommand(menuId, restaurantId);
         var result = await sender.Send(command, ct);

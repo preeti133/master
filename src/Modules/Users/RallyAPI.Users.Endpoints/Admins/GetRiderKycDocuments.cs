@@ -24,7 +24,7 @@ public class GetRiderKycDocuments : IEndpoint
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var adminId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var adminId = Guid.Parse(user.FindFirstValue("sub")!);
         var result = await sender.Send(
             new GetRiderKycDocumentsQuery(adminId, riderId), cancellationToken);
 

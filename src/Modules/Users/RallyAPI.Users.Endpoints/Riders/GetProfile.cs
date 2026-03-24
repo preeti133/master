@@ -23,7 +23,7 @@ public class GetProfile : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var riderId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var riderId = Guid.Parse(user.FindFirstValue("sub")!);
         var query = new GetRiderProfileQuery(riderId);
         var result = await sender.Send(query, ct);
 

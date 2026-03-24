@@ -114,7 +114,7 @@ public class UpdateMenuItem : IEndpoint
         var userType = httpContext.User.FindFirst("user_type")?.Value ?? string.Empty;
         var isAdmin = userType.Equals("admin", StringComparison.OrdinalIgnoreCase);
 
-        var subClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        var subClaim = httpContext.User.FindFirst("sub")?.Value ?? string.Empty;
         var restaurantId = Guid.TryParse(subClaim, out var id) ? id : Guid.Empty;
 
         return (restaurantId, isAdmin);
@@ -127,7 +127,7 @@ public class UpdateMenuItem : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new UpdateMenuItemCommand(
             itemId,

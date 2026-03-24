@@ -107,8 +107,7 @@ public sealed class NotificationHub : Hub
 
     private Guid? GetUserId()
     {
-        var sub = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                  ?? Context.User?.FindFirst("sub")?.Value;
+        var sub = Context.User?.FindFirst("sub")?.Value;
 
         return Guid.TryParse(sub, out var id) ? id : null;
     }
