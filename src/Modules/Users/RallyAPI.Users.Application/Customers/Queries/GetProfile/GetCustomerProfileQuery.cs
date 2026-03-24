@@ -20,4 +20,5 @@ public sealed record CustomerAddressResponse(
     decimal Latitude,
     decimal Longitude,
     string Label,
-    bool IsDefault);
+    bool IsDefault,
+    string? PlaceId = null);

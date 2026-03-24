@@ -9,4 +9,5 @@ public sealed record AddCustomerAddressCommand(
     string? Landmark,
     decimal Latitude,
     decimal Longitude,
-    string Label) : IRequest<Result<Guid>>;
+    string Label,
+    string? PlaceId = null) : IRequest<Result<Guid>>;

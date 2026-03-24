@@ -24,7 +24,8 @@ public class AddAddress : IEndpoint
         decimal Latitude,
         decimal Longitude,
         string Label,
-        bool IsDefault);
+        bool IsDefault,
+        string? PlaceId = null);
 
     private static async Task<IResult> HandleAsync(
         AddCustomerAddressRequest request,
@@ -43,7 +44,8 @@ public class AddAddress : IEndpoint
             request.Landmark,
             request.Latitude,
             request.Longitude,
-            request.Label);
+            request.Label,
+            request.PlaceId);
         //Removed this parameter        request.IsDefault
 
     var result = await sender.Send(command, cancellationToken);

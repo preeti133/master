@@ -39,7 +39,8 @@ internal sealed class GetCustomerAddressesQueryHandler
                 a.Address.Latitude,
                 a.Address.Longitude,
                 a.Address.Label,
-                a.IsDefault))
+                a.IsDefault,
+                a.Address.PlaceId))
             .ToList();
 
         return Result<List<CustomerAddressResponse>>.Success(addresses);

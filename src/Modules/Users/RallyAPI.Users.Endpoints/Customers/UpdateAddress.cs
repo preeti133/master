@@ -25,7 +25,8 @@ public class UpdateAddress : IEndpoint
         string? Landmark,
         decimal Latitude,
         decimal Longitude,
-        string Label);
+        string Label,
+        string? PlaceId = null);
 
     private static async Task<IResult> HandleAsync(
         Guid addressId,
@@ -45,7 +46,8 @@ public class UpdateAddress : IEndpoint
             request.Landmark,
             request.Latitude,
             request.Longitude,
-            request.Label);
+            request.Label,
+            request.PlaceId);
 
         var result = await sender.Send(command, cancellationToken);
 
