@@ -50,6 +50,12 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
                 AvgPrepTimeMins = r.AvgPrepTimeMins,
                 OpeningTime = r.OpeningTime,
                 ClosingTime = r.ClosingTime,
+                CuisineTypes = r.CuisineTypes,
+                IsPureVeg = r.IsPureVeg,
+                IsVeganFriendly = r.IsVeganFriendly,
+                HasJainOptions = r.HasJainOptions,
+                MinOrderAmount = r.MinOrderAmount,
+                LogoUrl = r.LogoUrl,
                 DistanceKm = distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : null
             };
         }).ToList();
