@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RallyAPI.Catalog.Endpoints;
 using RallyAPI.Delivery.Endpoints;
+using RallyAPI.Host.DevEndpoints;
 using RallyAPI.Host.Hubs;
 using RallyAPI.Host.Services;
 using RallyAPI.Infrastructure;
@@ -94,6 +95,10 @@ else
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Prevent .NET from remapping "sub" → ClaimTypes.NameIdentifier etc.
+        // This keeps JWT claim names as-is so FindFirst("sub") works everywhere.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -102,7 +107,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new RsaSecurityKey(rsa)
+            IssuerSigningKey = new RsaSecurityKey(rsa),
+            RoleClaimType = "role",
+            NameClaimType = "sub"
         };
 
         // SignalR WebSocket upgrade: bearer token comes via query string
@@ -256,7 +263,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",     // React dev server
                 "http://localhost:5173",     // Vite dev server
                 "http://localhost:8081",     // Expo/React Native web
-                "https://hivago.vercel.app")   // Production 
+                "https://hivago.vercel.app",   // Production 
+                "https://hivago-restaurant.vercel.app",
+                "http://localhost:4173")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -299,7 +308,12 @@ app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
 app.MapCartEndpoints();
 app.MapPaymentEndpoints();
+app.MapPayoutEndpoints();
 app.MapDeliveryModuleEndpoints();
+if (app.Environment.IsDevelopment())
+{
+    app.MapPurgeOrdersByRestaurant();
+}
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => "Rally API is running!");
 app.MapHealthChecks("/health", new HealthCheckOptions

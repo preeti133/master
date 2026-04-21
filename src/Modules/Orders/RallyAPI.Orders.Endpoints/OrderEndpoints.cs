@@ -13,9 +13,14 @@ using RallyAPI.Orders.Application.Commands.RejectOrder;
 using RallyAPI.Orders.Application.Commands.UpdateOrderStatus;
 using RallyAPI.Orders.Application.DTOs;
 using RallyAPI.Orders.Application.DTOs.Requests;
+using RallyAPI.Orders.Application.Queries.GetOrderNotes;
+using RallyAPI.Orders.Application.Queries.GetOrdersByCustomer;
+using RallyAPI.Orders.Application.Commands.AddOrderNote;
 using RallyAPI.Orders.Application.Queries.GetActiveOrders;
+using RallyAPI.Orders.Application.Queries.GetFilteredOrders;
 using RallyAPI.Orders.Application.Queries.GetOrderById;
 using RallyAPI.Orders.Application.Queries.GetOrderByNumber;
+using RallyAPI.Orders.Application.Queries.GetOrderNotes;
 using RallyAPI.Orders.Application.Queries.GetOrdersByCustomer;
 using RallyAPI.Orders.Application.Queries.GetOrdersByRestaurant;
 using RallyAPI.Orders.Domain.Enums;
@@ -45,6 +50,7 @@ public static class OrderEndpoints
             .WithName("PlaceOrder")
             .WithSummary("Place a new order")
             .RequireAuthorization("Customer")
+            .RequireRateLimiting("login")
             .Produces<OrderDto>(StatusCodes.Status201Created)
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
             .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
@@ -85,6 +91,29 @@ public static class OrderEndpoints
             .WithSummary("Get all active orders")
             .RequireAuthorization("Admin")
             .Produces<IReadOnlyList<OrderSummaryDto>>();
+
+        // Filtered Orders (Admin)
+        group.MapGet("/", GetFilteredOrders)
+            .WithName("GetFilteredOrders")
+            .WithSummary("Get filtered order history")
+            .RequireAuthorization("Admin")
+            .Produces<PagedResult<OrderSummaryDto>>();
+
+        // Add Order Note (Admin)
+        group.MapPost("/{orderId:guid}/notes", AddOrderNote)
+            .WithName("AddOrderNote")
+            .WithSummary("Add an admin note to an order")
+            .RequireAuthorization("Admin")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+        // Get Order Notes (Admin)
+        group.MapGet("/{orderId:guid}/notes", GetOrderNotes)
+            .WithName("GetOrderNotes")
+            .WithSummary("Get admin notes for an order")
+            .RequireAuthorization("Admin")
+            .Produces<OrderNotesResponse>()
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
         // Confirm Order (Restaurant)
         group.MapPut("/{orderId:guid}/confirm", ConfirmOrder)
@@ -230,21 +259,10 @@ public static class OrderEndpoints
         var command = PlaceOrderCommand.Create(
             customerId: currentUser.UserId.Value,
             customerName: currentUser.UserName ?? "Customer",
-            paymentId: request.PaymentId,
             request: request,
-            paymentTransactionId: request.PaymentTransactionId,
             deliveryQuoteId: request.DeliveryQuoteId,
             customerPhone: currentUser.Phone,
             customerEmail: currentUser.Email);
-
-
-        //var command = PlaceOrderCommand.Create(
-        //    currentUser.UserId.Value,
-        //    currentUser.UserName ?? "Customer",
-        //     paymentId: request.PaymentId,
-        //    request,
-        //    currentUser.Phone,
-        //    currentUser.Email);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -497,6 +515,69 @@ public static class OrderEndpoints
         };
 
         var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> GetFilteredOrders(
+        [FromQuery] string? status,
+        [FromQuery] Guid? restaurantId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? search,
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        OrderStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<OrderStatus>(status, true, out var s))
+            parsedStatus = s;
+
+        var query = new GetFilteredOrdersQuery
+        {
+            Status = parsedStatus,
+            RestaurantId = restaurantId,
+            From = from,
+            To = to,
+            Search = search,
+            Page = page > 0 ? page : 1,
+            PageSize = pageSize > 0 ? Math.Min(pageSize, 100) : 20
+        };
+
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> AddOrderNote(
+        Guid orderId,
+        [FromBody] AddOrderNoteRequest request,
+        IMediator mediator,
+        ICurrentUserService currentUser,
+        CancellationToken cancellationToken)
+    {
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var command = new AddOrderNoteCommand(orderId, currentUser.UserId.Value, request.Note);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> GetOrderNotes(
+        Guid orderId,
+        IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetOrderNotesQuery(orderId), cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)

@@ -23,7 +23,7 @@ public class GoOnline : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var riderId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var riderId = Guid.Parse(user.FindFirstValue("sub")!);
         var command = new GoOnlineCommand(riderId);
         var result = await sender.Send(command, ct);
 

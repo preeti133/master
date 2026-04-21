@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RallyAPI.Users.Domain.Entities;
 using RallyAPI.Users.Domain.ValueObjects;
@@ -79,6 +81,12 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
             .HasDefaultValue(false)
             .IsRequired();
 
+        // AutoAcceptOrders
+        builder.Property(r => r.AutoAcceptOrders)
+            .HasColumnName("auto_accept_orders")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         // AvgPrepTimeMins
         builder.Property(r => r.AvgPrepTimeMins)
             .HasColumnName("avg_prep_time_mins")
@@ -144,5 +152,54 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
         builder.Property(e => e.LogoFileKey)
                .HasColumnName("logo_file_key")
                .HasMaxLength(500);
+
+        // Owner link (multi-outlet support)
+        builder.Property(r => r.OwnerId)
+            .HasColumnName("owner_id");
+
+        builder.HasOne<RestaurantOwner>()
+            .WithMany()
+            .HasForeignKey(r => r.OwnerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // FSSAI compliance
+        builder.Property(r => r.FssaiNumber)
+            .HasColumnName("fssai_number")
+            .HasMaxLength(20);
+
+        // Cuisine/dietary attributes — jsonb requires explicit converter for List<string>
+        // (Npgsql 8.x maps List<string> to text[] by default, not jsonb)
+        builder.Property(r => r.CuisineTypes)
+            .HasColumnName("cuisine_types")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new(),
+                new ValueComparer<List<string>>(
+                    (a, b) => a != null && b != null && a.SequenceEqual(b),
+                    c => c.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                    c => c.ToList()));
+
+        builder.Property(r => r.IsPureVeg)
+            .HasColumnName("is_pure_veg")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.IsVeganFriendly)
+            .HasColumnName("is_vegan_friendly")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.HasJainOptions)
+            .HasColumnName("has_jain_options")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.MinOrderAmount)
+            .HasColumnName("min_order_amount")
+            .HasPrecision(10, 2)
+            .HasDefaultValue(0m)
+            .IsRequired();
     }
 }

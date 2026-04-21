@@ -22,28 +22,24 @@ public sealed class CurrentUserService : ICurrentUserService
     {
         get
         {
-            var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User?.FindFirst("sub")?.Value
+            var userIdClaim = User?.FindFirst("sub")?.Value
                 ?? User?.FindFirst("userId")?.Value;
 
             return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
         }
     }
 
-    public string? UserName => User?.FindFirst(ClaimTypes.Name)?.Value
-        ?? User?.FindFirst("name")?.Value;
+    public string? UserName => User?.FindFirst("name")?.Value;
 
-    public string? Email => User?.FindFirst(ClaimTypes.Email)?.Value
-        ?? User?.FindFirst("email")?.Value;
+    public string? Email => User?.FindFirst("email")?.Value;
 
-    public string? Phone => User?.FindFirst(ClaimTypes.MobilePhone)?.Value
-        ?? User?.FindFirst("phone")?.Value;
+    public string? Phone => User?.FindFirst("phone")?.Value;
 
     public IReadOnlyList<string> Roles
     {
         get
         {
-            var roles = User?.FindAll(ClaimTypes.Role)
+            var roles = User?.FindAll("role")
                 .Select(c => c.Value)
                 .ToList();
             return roles ?? new List<string>();

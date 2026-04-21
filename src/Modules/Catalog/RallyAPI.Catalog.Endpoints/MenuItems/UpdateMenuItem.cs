@@ -114,7 +114,7 @@ public class UpdateMenuItem : IEndpoint
         var userType = httpContext.User.FindFirst("user_type")?.Value ?? string.Empty;
         var isAdmin = userType.Equals("admin", StringComparison.OrdinalIgnoreCase);
 
-        var subClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        var subClaim = httpContext.User.FindFirst("sub")?.Value ?? string.Empty;
         var restaurantId = Guid.TryParse(subClaim, out var id) ? id : Guid.Empty;
 
         return (restaurantId, isAdmin);
@@ -127,7 +127,7 @@ public class UpdateMenuItem : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new UpdateMenuItemCommand(
             itemId,
@@ -143,7 +143,19 @@ public class UpdateMenuItem : IEndpoint
                 o.Name,
                 o.Type,
                 o.AdditionalPrice,
-                o.IsDefault)).ToList());
+                o.IsDefault)).ToList(),
+            request.OptionGroups?.Select(g => new OptionGroupDto(
+                g.GroupName,
+                g.IsRequired,
+                g.MinSelections,
+                g.MaxSelections,
+                g.DisplayOrder,
+                g.Options.Select(o => new MenuItemOptionDto(
+                    o.Name,
+                    o.Type,
+                    o.AdditionalPrice,
+                    o.IsDefault)).ToList())).ToList(),
+            request.Tags);
 
         var result = await sender.Send(command, ct);
 
@@ -161,4 +173,6 @@ public record UpdateMenuItemRequest(
     int DisplayOrder,
     bool IsVegetarian,
     int PreparationTimeMinutes,
-    List<MenuItemOptionRequest>? Options);
+    List<MenuItemOptionRequest>? Options,
+    List<OptionGroupRequest>? OptionGroups,
+    List<string>? Tags);

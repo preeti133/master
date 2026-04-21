@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using StackExchange.Redis;
@@ -15,6 +16,7 @@ public sealed class OtpServiceTests
     private readonly IDatabase _db;
     private readonly ISmsService _smsService;
     private readonly ILogger<OtpService> _logger;
+    private readonly IHostEnvironment _environment;
     private readonly OtpService _service;
 
     private const string Phone = "+919876543210";
@@ -25,9 +27,11 @@ public sealed class OtpServiceTests
         _db = Substitute.For<IDatabase>();
         _smsService = Substitute.For<ISmsService>();
         _logger = Substitute.For<ILogger<OtpService>>();
+        _environment = Substitute.For<IHostEnvironment>();
+        _environment.EnvironmentName.Returns("Development");
 
         _redis.GetDatabase().Returns(_db);
-        _service = new OtpService(_redis, _smsService, _logger);
+        _service = new OtpService(_redis, _smsService, _logger, _environment);
     }
 
     // --- GenerateAndSendOtpAsync ---

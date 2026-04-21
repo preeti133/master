@@ -24,6 +24,7 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
         CancellationToken ct = default)
     {
         var query = _context.Restaurants
+            .AsNoTracking()
             .Where(r => r.IsActive && r.DeletedAt == null);
 
         var restaurants = await query.ToListAsync(ct);
@@ -50,6 +51,12 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
                 AvgPrepTimeMins = r.AvgPrepTimeMins,
                 OpeningTime = r.OpeningTime,
                 ClosingTime = r.ClosingTime,
+                CuisineTypes = r.CuisineTypes,
+                IsPureVeg = r.IsPureVeg,
+                IsVeganFriendly = r.IsVeganFriendly,
+                HasJainOptions = r.HasJainOptions,
+                MinOrderAmount = r.MinOrderAmount,
+                LogoUrl = r.LogoUrl,
                 DistanceKm = distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : null
             };
         }).ToList();
@@ -75,6 +82,7 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
         CancellationToken ct = default)
     {
         var r = await _context.Restaurants
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == restaurantId && r.IsActive && r.DeletedAt == null, ct);
 
         if (r is null) return null;
@@ -89,9 +97,12 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
             Longitude = (double)r.Longitude,
             IsActive = r.IsActive,
             IsAcceptingOrders = r.IsAcceptingOrders,
+            AutoAcceptOrders = r.AutoAcceptOrders,
             AvgPrepTimeMins = r.AvgPrepTimeMins,
             OpeningTime = r.OpeningTime,
-            ClosingTime = r.ClosingTime
+            ClosingTime = r.ClosingTime,
+            CommissionPercentage = r.CommissionPercentage,
+            OwnerId = r.OwnerId
         };
     }
 

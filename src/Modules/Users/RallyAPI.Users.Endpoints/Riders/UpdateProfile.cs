@@ -82,7 +82,7 @@ public class UpdateProfile : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var riderId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var riderId = Guid.Parse(user.FindFirstValue("sub")!);
         var command = new UpdateRiderProfileCommand(
             riderId,
             request.Name,
