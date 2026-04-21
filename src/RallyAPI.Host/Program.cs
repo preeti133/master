@@ -148,6 +148,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("user_type", "rider"));
     options.AddPolicy("Restaurant", policy =>
         policy.RequireClaim("user_type", "restaurant"));
+    options.AddPolicy("Owner", policy =>
+        policy.RequireClaim("user_type", "owner"));
     options.AddPolicy("Admin", policy =>
         policy.RequireClaim("user_type", "admin"));
     options.AddPolicy("AdminOrRestaurant", policy =>
@@ -313,6 +315,7 @@ app.MapDeliveryModuleEndpoints();
 if (app.Environment.IsDevelopment())
 {
     app.MapPurgeOrdersByRestaurant();
+    app.MapSeedRestaurantOwner();
 }
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => "Rally API is running!");

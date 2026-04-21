@@ -39,6 +39,15 @@ public class RestaurantRepository : IRestaurantRepository
             .AnyAsync(r => r.Email == email, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Restaurant>> GetByOwnerIdAsync(Guid ownerId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Restaurants
+            .AsNoTracking()
+            .Where(r => r.OwnerId == ownerId)
+            .OrderBy(r => r.Name)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Restaurant restaurant, CancellationToken cancellationToken = default)
     {
         await _context.Restaurants.AddAsync(restaurant, cancellationToken);

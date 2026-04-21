@@ -170,6 +170,21 @@ public class JwtProvider : IJwtProvider
         return GenerateTokenPair(claims);
     }
 
+    public TokenPair GenerateOwnerTokenPair(RestaurantOwner owner)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, owner.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Email, owner.Email.Value),
+            new("name", owner.Name),
+            new("role", "Owner"),
+            new("user_type", "owner")
+        };
+
+        return GenerateTokenPair(claims);
+    }
+
     // ── Private helpers ──
 
     private TokenPair GenerateTokenPair(List<Claim> claims)
