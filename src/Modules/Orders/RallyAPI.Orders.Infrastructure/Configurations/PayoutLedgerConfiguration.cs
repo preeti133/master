@@ -43,6 +43,11 @@ public sealed class PayoutLedgerConfiguration : IEntityTypeConfiguration<PayoutL
             .HasPrecision(5, 2)
             .IsRequired();
 
+        builder.Property(l => l.CommissionFlatFee)
+            .HasColumnName("commission_flat_fee")
+            .HasPrecision(10, 2)
+            .IsRequired(false);
+
         builder.Property(l => l.CommissionAmount)
             .HasColumnName("commission_amount")
             .HasPrecision(10, 2)

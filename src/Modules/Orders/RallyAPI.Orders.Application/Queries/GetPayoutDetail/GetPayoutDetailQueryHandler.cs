@@ -42,6 +42,7 @@ public sealed class GetPayoutDetailQueryHandler
             OrderAmount = e.OrderAmount,
             GstAmount = e.GstAmount,
             CommissionPercentage = e.CommissionPercentage,
+            CommissionFlatFee = e.CommissionFlatFee,
             CommissionAmount = e.CommissionAmount,
             CommissionGst = e.CommissionGst,
             TdsAmount = e.TdsAmount,

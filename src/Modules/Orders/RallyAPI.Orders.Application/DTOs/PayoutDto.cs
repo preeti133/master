@@ -30,6 +30,7 @@ public sealed record PayoutLedgerDto
     public decimal OrderAmount { get; init; }
     public decimal GstAmount { get; init; }
     public decimal CommissionPercentage { get; init; }
+    public decimal? CommissionFlatFee { get; init; }
     public decimal CommissionAmount { get; init; }
     public decimal CommissionGst { get; init; }
     public decimal TdsAmount { get; init; }

@@ -5,7 +5,7 @@ namespace RallyAPI.Orders.Domain.Entities;
 
 /// <summary>
 /// One row per delivered order. Source of truth for all restaurant payout calculations.
-/// Tracks GST (5% on order), commission, commission GST (18%), and TDS (1%).
+/// Tracks GST (5% on order), commission flat fee, commission GST (18%), and TDS (1%).
 /// </summary>
 public sealed class PayoutLedger : BaseEntity
 {
@@ -14,7 +14,14 @@ public sealed class PayoutLedger : BaseEntity
     public Guid OrderId { get; private set; }
     public decimal OrderAmount { get; private set; }
     public decimal GstAmount { get; private set; }
+
+    // Legacy: percentage-based commission. Kept for one release for rollback safety.
+    // For new rows (Phase 2), this is 0 and CommissionFlatFee is the source of truth.
     public decimal CommissionPercentage { get; private set; }
+
+    // Phase 2: flat-fee commission snapshot in ₹. Null for pre-Phase-2 rows.
+    public decimal? CommissionFlatFee { get; private set; }
+
     public decimal CommissionAmount { get; private set; }
     public decimal CommissionGst { get; private set; }
     public decimal TdsAmount { get; private set; }
@@ -27,7 +34,7 @@ public sealed class PayoutLedger : BaseEntity
     private PayoutLedger() { }
 
     /// <summary>
-    /// Creates a payout ledger entry with all financial calculations.
+    /// Creates a payout ledger entry using the Phase 2 flat-fee commission formula.
     /// Called when an order is delivered.
     /// </summary>
     public static PayoutLedger Create(
@@ -35,7 +42,7 @@ public sealed class PayoutLedger : BaseEntity
         Guid outletId,
         Guid orderId,
         decimal orderAmount,
-        decimal commissionPercentage)
+        decimal commissionFlatFee)
     {
         if (ownerId == Guid.Empty)
             throw new ArgumentException("Owner ID is required.", nameof(ownerId));
@@ -49,13 +56,15 @@ public sealed class PayoutLedger : BaseEntity
         if (orderAmount <= 0)
             throw new ArgumentException("Order amount must be positive.", nameof(orderAmount));
 
-        // Calculate financial breakdown per Indian tax law
+        if (commissionFlatFee < 0)
+            throw new ArgumentException("Commission flat fee cannot be negative.", nameof(commissionFlatFee));
+
+        // Phase 2 financial breakdown per Indian tax law.
         var gstAmount = Math.Round(orderAmount * 0.05m, 2);              // 5% GST on food (Section 9(5) CGST)
-        var commissionAmount = Math.Round(orderAmount * commissionPercentage / 100m, 2);
+        var commissionAmount = Math.Round(commissionFlatFee, 2);
         var commissionGst = Math.Round(commissionAmount * 0.18m, 2);     // 18% GST on commission (service)
-        var netBeforeTds = orderAmount - commissionAmount;
-        var tdsAmount = Math.Round(netBeforeTds * 0.01m, 2);             // 1% TDS (Section 194-O)
-        var netAmount = netBeforeTds - tdsAmount;
+        var tdsAmount = Math.Round(orderAmount * 0.01m, 2);              // 1% TDS on gross subtotal (Section 194-O)
+        var netAmount = orderAmount - commissionAmount - commissionGst - tdsAmount;
 
         return new PayoutLedger
         {
@@ -65,7 +74,8 @@ public sealed class PayoutLedger : BaseEntity
             OrderId = orderId,
             OrderAmount = orderAmount,
             GstAmount = gstAmount,
-            CommissionPercentage = commissionPercentage,
+            CommissionPercentage = 0m,
+            CommissionFlatFee = commissionAmount,
             CommissionAmount = commissionAmount,
             CommissionGst = commissionGst,
             TdsAmount = tdsAmount,

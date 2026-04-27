@@ -82,14 +82,14 @@ public sealed class OrderDeliveredPayoutLedgerHandler : INotificationHandler<Ord
                 outletId: restaurant.Id,
                 orderId: order.Id,
                 orderAmount: orderAmount,
-                commissionPercentage: restaurant.CommissionPercentage);
+                commissionFlatFee: restaurant.CommissionFlatFee);
 
             await _ledgerRepository.AddAsync(ledgerEntry, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Created payout ledger entry for order {OrderNumber}: amount={Amount}, commission={Commission}%, net={Net}",
-                notification.OrderNumber, orderAmount, restaurant.CommissionPercentage, ledgerEntry.NetAmount);
+                "Created payout ledger entry for order {OrderNumber}: amount={Amount}, commissionFlatFee={Commission}, net={Net}",
+                notification.OrderNumber, orderAmount, restaurant.CommissionFlatFee, ledgerEntry.NetAmount);
         }
         catch (Exception ex)
         {
