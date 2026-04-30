@@ -241,6 +241,12 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("address_line");
 
+                    b.Property<bool>("AutoAcceptOrders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("auto_accept_orders");
+
                     b.Property<int>("AvgPrepTimeMins")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -250,6 +256,13 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("ClosingTime")
                         .HasColumnType("time without time zone")
                         .HasColumnName("closing_time");
+
+                    b.Property<decimal>("CommissionFlatFee")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasDefaultValue(30.00m)
+                        .HasColumnName("commission_flat_fee");
 
                     b.Property<decimal>("CommissionPercentage")
                         .ValueGeneratedOnAdd()
@@ -262,15 +275,50 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("CuisineTypes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("cuisine_types")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<int>("DeliveryMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("delivery_mode");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<int>("DietaryType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("dietary_type");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("email");
+
+                    b.Property<string>("FssaiNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("fssai_number");
+
+                    b.Property<bool>("HasJainOptions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_jain_options");
 
                     b.Property<bool>("IsAcceptingOrders")
                         .ValueGeneratedOnAdd()
@@ -283,6 +331,18 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsPureVeg")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_pure_veg");
+
+                    b.Property<bool>("IsVeganFriendly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_vegan_friendly");
 
                     b.Property<decimal>("Latitude")
                         .HasPrecision(10, 8)
@@ -304,6 +364,13 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(11,8)")
                         .HasColumnName("longitude");
 
+                    b.Property<decimal>("MinOrderAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("min_order_amount");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -313,6 +380,121 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("OpeningTime")
                         .HasColumnType("time without time zone")
                         .HasColumnName("opening_time");
+
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("password_hash");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("RstCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("rst_code");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<bool>("UseCustomSchedule")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("use_custom_schedule");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("idx_restaurants_email");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("RstCode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_restaurants_rst_code")
+                        .HasFilter("\"rst_code\" IS NOT NULL");
+
+                    b.HasIndex("IsActive", "IsAcceptingOrders")
+                        .HasDatabaseName("idx_restaurants_active");
+
+                    b.HasIndex("Latitude", "Longitude")
+                        .HasDatabaseName("idx_restaurants_location");
+
+                    b.ToTable("restaurants", "users");
+                });
+
+            modelBuilder.Entity("RallyAPI.Users.Domain.Entities.RestaurantOwner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BankAccountName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("bank_account_name");
+
+                    b.Property<string>("BankAccountNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bank_account_number");
+
+                    b.Property<string>("BankIfscCode")
+                        .HasMaxLength(11)
+                        .HasColumnType("character varying(11)")
+                        .HasColumnName("bank_ifsc_code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("GstNumber")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("gst_number");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PanNumber")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("pan_number");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -339,15 +521,51 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique()
-                        .HasDatabaseName("idx_restaurants_email");
+                        .HasDatabaseName("idx_restaurant_owners_email");
 
-                    b.HasIndex("IsActive", "IsAcceptingOrders")
-                        .HasDatabaseName("idx_restaurants_active");
+                    b.ToTable("restaurant_owners", "users");
+                });
 
-                    b.HasIndex("Latitude", "Longitude")
-                        .HasDatabaseName("idx_restaurants_location");
+            modelBuilder.Entity("RallyAPI.Users.Domain.Entities.RestaurantScheduleSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
 
-                    b.ToTable("restaurants", "users");
+                    b.Property<TimeOnly>("ClosesAt")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("closes_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer")
+                        .HasColumnName("day_of_week");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<TimeOnly>("OpensAt")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("opens_at");
+
+                    b.Property<Guid>("RestaurantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("restaurant_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestaurantId", "DayOfWeek")
+                        .HasDatabaseName("idx_restaurant_schedule_slots_restaurant_day");
+
+                    b.ToTable("restaurant_schedule_slots", "users");
                 });
 
             modelBuilder.Entity("RallyAPI.Users.Domain.Entities.Rider", b =>
@@ -568,6 +786,11 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                                 .HasColumnType("numeric(11,8)")
                                 .HasColumnName("longitude");
 
+                            b1.Property<string>("PlaceId")
+                                .HasMaxLength(300)
+                                .HasColumnType("character varying(300)")
+                                .HasColumnName("place_id");
+
                             b1.HasKey("CustomerAddressId");
 
                             b1.ToTable("customer_addresses", "users");
@@ -577,6 +800,57 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Address")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RallyAPI.Users.Domain.Entities.Restaurant", b =>
+                {
+                    b.HasOne("RallyAPI.Users.Domain.Entities.RestaurantOwner", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.OwnsOne("RallyAPI.Users.Domain.ValueObjects.NotificationPreferences", "Notifications", b1 =>
+                        {
+                            b1.Property<Guid>("RestaurantId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<bool>("BrowserNotifications")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(true)
+                                .HasColumnName("notify_browser");
+
+                            b1.Property<bool>("EmailAlerts")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(true)
+                                .HasColumnName("notify_email_alerts");
+
+                            b1.Property<bool>("OrderSound")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(true)
+                                .HasColumnName("notify_order_sound");
+
+                            b1.HasKey("RestaurantId");
+
+                            b1.ToTable("restaurants", "users");
+
+                            b1.WithOwner()
+                                .HasForeignKey("RestaurantId");
+                        });
+
+                    b.Navigation("Notifications")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RallyAPI.Users.Domain.Entities.RestaurantScheduleSlot", b =>
+                {
+                    b.HasOne("RallyAPI.Users.Domain.Entities.Restaurant", null)
+                        .WithMany("ScheduleSlots")
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -592,6 +866,11 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("RallyAPI.Users.Domain.Entities.Customer", b =>
                 {
                     b.Navigation("Addresses");
+                });
+
+            modelBuilder.Entity("RallyAPI.Users.Domain.Entities.Restaurant", b =>
+                {
+                    b.Navigation("ScheduleSlots");
                 });
 
             modelBuilder.Entity("RallyAPI.Users.Domain.Entities.Rider", b =>

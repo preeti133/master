@@ -40,6 +40,9 @@ public class Payment : BaseEntity
     public string CustomerEmail { get; private set; } = string.Empty;
     public string CustomerPhone { get; private set; } = string.Empty;
 
+    // === Webhook Tracking ===
+    public bool WebhookFailed { get; private set; }
+
     // === Refund Fields ===
     public string? RefundRequestId { get; private set; }
     public decimal? RefundAmount { get; private set; }
@@ -130,6 +133,12 @@ public class Payment : BaseEntity
         RefundAmount = refundAmount;
         RefundStatus = "Queued";
         Status = refundAmount >= Amount ? PaymentStatus.RefundInitiated : PaymentStatus.RefundInitiated;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkWebhookFailed()
+    {
+        WebhookFailed = true;
         UpdatedAt = DateTime.UtcNow;
     }
 

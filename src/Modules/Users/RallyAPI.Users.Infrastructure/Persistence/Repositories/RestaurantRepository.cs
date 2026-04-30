@@ -20,6 +20,13 @@ public class RestaurantRepository : IRestaurantRepository
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
+    public async Task<Restaurant?> GetByIdWithScheduleAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Restaurants
+            .Include(r => r.ScheduleSlots)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+    }
+
     public async Task<Restaurant?> GetByEmailAsync(Email email, CancellationToken cancellationToken = default)
     {
         return await _context.Restaurants
@@ -32,6 +39,15 @@ public class RestaurantRepository : IRestaurantRepository
             .AnyAsync(r => r.Email == email, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Restaurant>> GetByOwnerIdAsync(Guid ownerId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Restaurants
+            .AsNoTracking()
+            .Where(r => r.OwnerId == ownerId)
+            .OrderBy(r => r.Name)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Restaurant restaurant, CancellationToken cancellationToken = default)
     {
         await _context.Restaurants.AddAsync(restaurant, cancellationToken);
@@ -40,5 +56,42 @@ public class RestaurantRepository : IRestaurantRepository
     public void Update(Restaurant restaurant, CancellationToken cancellationToken = default)
     {
         _context.Restaurants.Update(restaurant);
+    }
+
+    public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Restaurants.CountAsync(cancellationToken);
+    }
+
+    public Task<int> CountActiveAsync(CancellationToken cancellationToken = default)
+        => _context.Restaurants.CountAsync(r => r.IsActive, cancellationToken);
+
+    public async Task<(IReadOnlyList<Restaurant> Items, int TotalCount)> GetPagedAsync(
+        bool? isActive,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Restaurants.AsNoTracking().AsQueryable();
+
+        if (isActive.HasValue)
+            query = query.Where(r => r.IsActive == isActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(r => r.Name.ToLower().Contains(term));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(r => r.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
     }
 }

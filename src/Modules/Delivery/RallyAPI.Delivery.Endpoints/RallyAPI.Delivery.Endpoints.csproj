@@ -18,7 +18,6 @@
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\RallyAPI.SharedKernel\RallyAPI.SharedKernel.csproj" />
 	  <ProjectReference Include="..\..\Integrations\ProRouting\ProRouting.csproj" />
-	  <ProjectReference Include="..\..\Orders\RallyAPI.Orders.Application\RallyAPI.Orders.Application.csproj" />
 	  <ProjectReference Include="..\RallyAPI.Delivery.Application\RallyAPI.Delivery.Application.csproj" />
 	  <ProjectReference Include="..\RallyAPI.Delivery.Domain\RallyAPI.Delivery.Domain.csproj" />
 	  <ProjectReference Include="..\RallyAPI.Delivery.Infrastructure\RallyAPI.Delivery.Infrastructure.csproj" />

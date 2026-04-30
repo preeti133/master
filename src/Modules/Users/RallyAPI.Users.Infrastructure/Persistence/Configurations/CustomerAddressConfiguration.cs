@@ -50,6 +50,11 @@ public class CustomerAddressConfiguration : IEntityTypeConfiguration<CustomerAdd
              .HasColumnName("label")
              .HasMaxLength(50)
              .IsRequired();
+
+            addressBuilder.Property(addr => addr.PlaceId)
+                .HasColumnName("place_id")
+                .HasMaxLength(300)
+                .IsRequired(false);
         });
 
         // IsDefault

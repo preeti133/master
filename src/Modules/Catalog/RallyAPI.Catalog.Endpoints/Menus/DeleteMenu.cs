@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using RallyAPI.Catalog.Application.Menus.Commands.DeleteMenu;
+using RallyAPI.SharedKernel.Extensions;
 
 namespace RallyAPI.Catalog.Endpoints.Menus;
 
@@ -23,13 +24,13 @@ public class DeleteMenu : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new DeleteMenuCommand(menuId, restaurantId);
         var result = await sender.Send(command, ct);
 
         return result.IsSuccess
             ? Results.Ok(new { message = "Menu deleted successfully" })
-            : Results.BadRequest(result.Error);
+            : result.Error.ToErrorResult();
     }
 }

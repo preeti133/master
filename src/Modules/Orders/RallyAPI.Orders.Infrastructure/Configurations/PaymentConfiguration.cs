@@ -75,6 +75,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasColumnName("customer_phone")
             .HasMaxLength(15);
 
+        builder.Property(p => p.WebhookFailed)
+            .HasColumnName("webhook_failed")
+            .HasDefaultValue(false);
+
         builder.Property(p => p.RefundRequestId)
             .HasColumnName("refund_request_id")
             .HasMaxLength(50);

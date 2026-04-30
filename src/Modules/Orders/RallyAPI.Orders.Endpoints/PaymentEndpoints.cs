@@ -20,7 +20,7 @@ public static class PaymentEndpoints
         // 1. Initiate payment — returns PayU checkout params
         group.MapPost("/initiate", async (
             InitiatePaymentRequest request,
-            RallyAPI.Orders.Application.Abstractions.ICurrentUserService currentUser,
+            RallyAPI.SharedKernel.Abstractions.ICurrentUserService currentUser,
             ISender sender) =>
         {
             if (!currentUser.UserId.HasValue)
@@ -61,7 +61,7 @@ public static class PaymentEndpoints
         // 3. Verify payment — frontend backup check
         group.MapPost("/verify", async (
             VerifyPaymentRequest request,
-            RallyAPI.Orders.Application.Abstractions.ICurrentUserService currentUser,
+            RallyAPI.SharedKernel.Abstractions.ICurrentUserService currentUser,
             ISender sender) =>
         {
             if (!currentUser.UserId.HasValue)

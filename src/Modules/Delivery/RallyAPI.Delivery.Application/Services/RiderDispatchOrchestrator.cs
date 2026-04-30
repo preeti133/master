@@ -71,8 +71,11 @@ public sealed class RiderDispatchOrchestrator
         DeliveryRequest deliveryRequest,
         CancellationToken ct)
     {
-        deliveryRequest.TransitionToOwnFleetSearch();
-        await _requestRepository.UpdateAsync(deliveryRequest, ct);
+        if (deliveryRequest.Status != DeliveryRequestStatus.SearchingOwnFleet)
+        {
+            deliveryRequest.TransitionToOwnFleetSearch();
+            await _requestRepository.UpdateAsync(deliveryRequest, ct);
+        }
 
         // Get available riders
         var riders = await _riderQueryService.GetAvailableRidersAsync(

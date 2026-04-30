@@ -13,7 +13,7 @@ using RallyAPI.Delivery.Infrastructure.Persistence;
 using RallyAPI.SharedKernel.Results;
 using Microsoft.EntityFrameworkCore;
 using RallyAPI.Delivery.Domain.Enums;
-using RallyAPI.Orders.Application.Abstractions;
+using RallyAPI.SharedKernel.Abstractions;
 
 namespace RallyAPI.Delivery.Endpoints;
 

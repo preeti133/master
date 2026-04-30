@@ -40,7 +40,8 @@ internal sealed class UpdateCustomerAddressCommandHandler
             request.Landmark,
             request.Latitude,
             request.Longitude,
-            request.Label);
+            request.Label,
+            request.PlaceId);
 
         if (newAddress.IsFailure)
             return Result.Failure(newAddress.Error);

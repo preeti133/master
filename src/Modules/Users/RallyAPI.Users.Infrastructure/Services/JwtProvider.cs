@@ -18,9 +18,11 @@ public class JwtProvider : IJwtProvider
     {
         _settings = settings.Value;
 
-        // Load private key once at startup
+        // Load private key once at startup — prefer PEM string (Railway env var) over file path
         _privateKey = RSA.Create();
-        var keyText = File.ReadAllText(_settings.PrivateKeyPath);
+        var keyText = !string.IsNullOrWhiteSpace(_settings.PrivateKeyPem)
+            ? _settings.PrivateKeyPem.Replace("\\n", "\n")
+            : File.ReadAllText(_settings.PrivateKeyPath);
         _privateKey.ImportFromPem(keyText);
     }
 
@@ -163,6 +165,21 @@ public class JwtProvider : IJwtProvider
             new("name", admin.Name),
             new("role", admin.Role.ToString()),
             new("user_type", "admin")
+        };
+
+        return GenerateTokenPair(claims);
+    }
+
+    public TokenPair GenerateOwnerTokenPair(RestaurantOwner owner)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, owner.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Email, owner.Email.Value),
+            new("name", owner.Name),
+            new("role", "Owner"),
+            new("user_type", "owner")
         };
 
         return GenerateTokenPair(claims);

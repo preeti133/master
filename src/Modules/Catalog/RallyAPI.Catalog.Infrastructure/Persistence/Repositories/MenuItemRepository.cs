@@ -22,13 +22,17 @@ internal sealed class MenuItemRepository : IMenuItemRepository
     {
         return await _context.MenuItems
             .Include(m => m.Options)
-            .FirstOrDefaultAsync(m => m.MenuId == id, ct);
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
+            .FirstOrDefaultAsync(m => m.Id == id, ct);
     }
 
     public async Task<List<MenuItem>> GetByMenuIdAsync(Guid menuId, CancellationToken ct = default)
     {
         return await _context.MenuItems
             .Include(m => m.Options)
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
             .Where(m => m.MenuId == menuId)
             .OrderBy(m => m.DisplayOrder)
             .ToListAsync(ct);
@@ -38,6 +42,8 @@ internal sealed class MenuItemRepository : IMenuItemRepository
     {
         return await _context.MenuItems
             .Include(m => m.Options)
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
             .Where(m => m.RestaurantId == restaurantId)
             .OrderBy(m => m.DisplayOrder)
             .ToListAsync(ct);
@@ -49,6 +55,8 @@ internal sealed class MenuItemRepository : IMenuItemRepository
 
         return await _context.MenuItems
             .Include(m => m.Options)
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
             .Where(m => m.IsAvailable &&
                 (EF.Functions.ILike(m.Name, searchTerm) ||
                  (m.Description != null && EF.Functions.ILike(m.Description, searchTerm))))
@@ -57,6 +65,24 @@ internal sealed class MenuItemRepository : IMenuItemRepository
             .ToListAsync(ct);
     }
 
+
+    public async Task<MenuItem?> GetByOptionGroupIdAsync(Guid optionGroupId, CancellationToken ct = default)
+    {
+        return await _context.MenuItems
+            .Include(m => m.Options)
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
+            .FirstOrDefaultAsync(m => m.OptionGroups.Any(g => g.Id == optionGroupId), ct);
+    }
+
+    public async Task<MenuItem?> GetByOptionIdAsync(Guid optionId, CancellationToken ct = default)
+    {
+        return await _context.MenuItems
+            .Include(m => m.Options)
+            .Include(m => m.OptionGroups)
+                .ThenInclude(g => g.Options)
+            .FirstOrDefaultAsync(m => m.Options.Any(o => o.Id == optionId), ct);
+    }
 
     public void Add(MenuItem item) => _context.MenuItems.Add(item);
 

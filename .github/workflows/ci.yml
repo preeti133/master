@@ -1,0 +1,61 @@
+name: Rally CI
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main, develop]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run unit tests
+        run: |
+          dotnet test tests/Modules/Orders/RallyAPI.Orders.Domain.Tests/ --no-build --configuration Release --verbosity normal
+          dotnet test tests/Modules/Orders/RallyAPI.Orders.Application.Tests/ --no-build --configuration Release --verbosity normal
+          dotnet test tests/Modules/Delivery/RallyAPI.Delivery.Application.Tests/ --no-build --configuration Release --verbosity normal
+          dotnet test tests/Modules/Pricing/RallyAPI.Pricing.Application.Tests/ --no-build --configuration Release --verbosity normal
+          dotnet test tests/Modules/Users/RallyAPI.Users.Infrastructure.Tests/ --no-build --configuration Release --verbosity normal
+          dotnet test RallyAPI.Integrations.ProRouting.Tests/ --no-build --configuration Release --verbosity normal
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run integration tests
+        run: dotnet test tests/RallyAPI.Integration.Tests/ --no-build --configuration Release --verbosity normal

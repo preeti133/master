@@ -45,9 +45,10 @@ internal sealed class GetRestaurantMenuQueryHandler
         var allItems = await _menuItemRepository.GetByRestaurantIdAsync(
             request.RestaurantId, cancellationToken);
 
-        // Group items by menu
+        // Group items by menu. Unavailable items are still returned so clients
+        // can render them as "out of stock" (Swiggy/Zomato style) instead of
+        // hiding them, and so the restaurant dashboard sees its own full list.
         var itemsByMenu = allItems
-            .Where(i => i.IsAvailable)
             .GroupBy(i => i.MenuId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -69,13 +70,29 @@ internal sealed class GetRestaurantMenuQueryHandler
                         i.IsAvailable,
                         i.IsVegetarian,
                         i.PreparationTimeMinutes,
-                        i.Options.Select(o => new MenuItemOptionResponse(
+                        i.Options.Where(o => o.OptionGroupId == null).Select(o => new MenuItemOptionResponse(
                             o.Id,
                             o.Name,
                             o.Type.ToString(),
                             o.AdditionalPrice,
                             o.IsDefault
-                        )).ToList()
+                        )).ToList(),
+                        i.OptionGroups.OrderBy(g => g.DisplayOrder).Select(g => new OptionGroupResponse(
+                            g.Id,
+                            g.GroupName,
+                            g.IsRequired,
+                            g.MinSelections,
+                            g.MaxSelections,
+                            g.DisplayOrder,
+                            g.Options.Select(o => new MenuItemOptionResponse(
+                                o.Id,
+                                o.Name,
+                                o.Type.ToString(),
+                                o.AdditionalPrice,
+                                o.IsDefault
+                            )).ToList()
+                        )).ToList(),
+                        i.Tags
                     )).ToList()
                     : new List<MenuItemResponse>()
             )).ToList();

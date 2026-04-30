@@ -8,6 +8,7 @@ using RallyAPI.Catalog.Application.MenuItems.Commands.UpdateMenuItem;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using RallyAPI.Catalog.Application.MenuItems.Commands.ConfirmMenuItemImage;
+using RallyAPI.SharedKernel.Extensions;
 
 
 namespace RallyAPI.Catalog.Endpoints.MenuItems;
@@ -57,7 +58,7 @@ public class UpdateMenuItem : IEndpoint
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(new { error = result.Error.Code, message = result.Error.Message });
+            : result.Error.ToErrorResult();
     })
     .RequireAuthorization("RestaurantOrAdmin")
     .WithName("GenerateMenuItemUploadUrl")
@@ -86,7 +87,7 @@ public class UpdateMenuItem : IEndpoint
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(new { error = result.Error.Code, message = result.Error.Message });
+            : result.Error.ToErrorResult();
     })
     .RequireAuthorization("RestaurantOrAdmin")
     .WithName("ConfirmMenuItemImage")
@@ -126,7 +127,7 @@ public class UpdateMenuItem : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new UpdateMenuItemCommand(
             itemId,
@@ -142,13 +143,25 @@ public class UpdateMenuItem : IEndpoint
                 o.Name,
                 o.Type,
                 o.AdditionalPrice,
-                o.IsDefault)).ToList());
+                o.IsDefault)).ToList(),
+            request.OptionGroups?.Select(g => new OptionGroupDto(
+                g.GroupName,
+                g.IsRequired,
+                g.MinSelections,
+                g.MaxSelections,
+                g.DisplayOrder,
+                g.Options.Select(o => new MenuItemOptionDto(
+                    o.Name,
+                    o.Type,
+                    o.AdditionalPrice,
+                    o.IsDefault)).ToList())).ToList(),
+            request.Tags);
 
         var result = await sender.Send(command, ct);
 
         return result.IsSuccess
             ? Results.Ok(new { message = "Menu item updated successfully" })
-            : Results.BadRequest(result.Error);
+            : result.Error.ToErrorResult();
     }
 }
 
@@ -160,4 +173,6 @@ public record UpdateMenuItemRequest(
     int DisplayOrder,
     bool IsVegetarian,
     int PreparationTimeMinutes,
-    List<MenuItemOptionRequest>? Options);
+    List<MenuItemOptionRequest>? Options,
+    List<OptionGroupRequest>? OptionGroups,
+    List<string>? Tags);

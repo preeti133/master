@@ -7,4 +7,4 @@ namespace RallyAPI.Orders.Application.Queries.GetOrderByNumber;
 /// <summary>
 /// Query to get order by order number.
 /// </summary>
-public sealed record GetOrderByNumberQuery(string OrderNumber) : IRequest<Result<OrderDto>>;
+public sealed record GetOrderByNumberQuery(string OrderNumber, Guid CallerId, string CallerRole) : IRequest<Result<OrderDto>>;

@@ -30,7 +30,8 @@ internal sealed class AddCustomerAddressCommandHandler
             request.Landmark,
             request.Latitude,
             request.Longitude,
-            request.Label);
+            request.Label,
+            request.PlaceId);
 
         if (addressResult.IsFailure)
             return Result.Failure<Guid>(addressResult.Error);

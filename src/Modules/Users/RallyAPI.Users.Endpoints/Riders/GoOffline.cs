@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using RallyAPI.SharedKernel.Extensions;
 using RallyAPI.Users.Application.Riders.Commands.GoOffline;
 using System.Security.Claims;
 
@@ -22,12 +23,12 @@ public class GoOffline : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var riderId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var riderId = Guid.Parse(user.FindFirstValue("sub")!);
         var command = new GoOfflineCommand(riderId);
         var result = await sender.Send(command, ct);
 
         return result.IsSuccess
             ? Results.Ok(new { message = "You are now offline" })
-            : Results.BadRequest(result.Error);
+            : result.Error.ToErrorResult();
     }
 }

@@ -24,6 +24,7 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
         CancellationToken ct = default)
     {
         var query = _context.Restaurants
+            .AsNoTracking()
             .Where(r => r.IsActive && r.DeletedAt == null);
 
         var restaurants = await query.ToListAsync(ct);
@@ -50,6 +51,12 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
                 AvgPrepTimeMins = r.AvgPrepTimeMins,
                 OpeningTime = r.OpeningTime,
                 ClosingTime = r.ClosingTime,
+                CuisineTypes = r.CuisineTypes,
+                IsPureVeg = r.IsPureVeg,
+                IsVeganFriendly = r.IsVeganFriendly,
+                HasJainOptions = r.HasJainOptions,
+                MinOrderAmount = r.MinOrderAmount,
+                LogoUrl = r.LogoUrl,
                 DistanceKm = distanceKm.HasValue ? Math.Round(distanceKm.Value, 2) : null
             };
         }).ToList();
@@ -75,6 +82,7 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
         CancellationToken ct = default)
     {
         var r = await _context.Restaurants
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == restaurantId && r.IsActive && r.DeletedAt == null, ct);
 
         if (r is null) return null;
@@ -89,9 +97,13 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
             Longitude = (double)r.Longitude,
             IsActive = r.IsActive,
             IsAcceptingOrders = r.IsAcceptingOrders,
+            AutoAcceptOrders = r.AutoAcceptOrders,
             AvgPrepTimeMins = r.AvgPrepTimeMins,
             OpeningTime = r.OpeningTime,
-            ClosingTime = r.ClosingTime
+            ClosingTime = r.ClosingTime,
+            CommissionPercentage = r.CommissionPercentage,
+            CommissionFlatFee = r.CommissionFlatFee,
+            OwnerId = r.OwnerId
         };
     }
 
@@ -114,4 +126,46 @@ internal sealed class RestaurantQueryService : IRestaurantQueryService
     }
 
     private static double ToRadians(double degrees) => degrees * Math.PI / 180.0;
+
+    public async Task<IReadOnlyDictionary<Guid, OwnerPayoutDisplay>> GetOwnerPayoutDisplaysAsync(
+        IReadOnlyCollection<Guid> ownerIds,
+        CancellationToken ct = default)
+    {
+        if (ownerIds.Count == 0)
+            return new Dictionary<Guid, OwnerPayoutDisplay>();
+
+        // Owner names come from users.restaurant_owners.
+        var owners = await _context.RestaurantOwners
+            .AsNoTracking()
+            .Where(o => ownerIds.Contains(o.Id))
+            .Select(o => new { o.Id, o.Name })
+            .ToListAsync(ct);
+
+        // Outlet count + first restaurant name come from users.restaurants.
+        var outletData = await _context.Restaurants
+            .AsNoTracking()
+            .Where(r => r.OwnerId.HasValue && ownerIds.Contains(r.OwnerId.Value))
+            .GroupBy(r => r.OwnerId!.Value)
+            .Select(g => new
+            {
+                OwnerId = g.Key,
+                OutletCount = g.Count(),
+                FirstName = g.OrderBy(r => r.Name).Select(r => r.Name).FirstOrDefault()
+            })
+            .ToListAsync(ct);
+
+        var outletByOwner = outletData.ToDictionary(x => x.OwnerId);
+
+        return owners.ToDictionary(
+            o => o.Id,
+            o =>
+            {
+                outletByOwner.TryGetValue(o.Id, out var info);
+                return new OwnerPayoutDisplay(
+                    o.Id,
+                    o.Name,
+                    info?.OutletCount ?? 0,
+                    info?.FirstName);
+            });
+    }
 }
