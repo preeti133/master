@@ -35,6 +35,15 @@ public sealed class AssignRiderCommandHandler : IRequestHandler<AssignRiderComma
             return Result.Failure<OrderDto>(OrderErrors.NotFound(command.OrderId));
         }
 
+        // Verify caller is Admin or the restaurant that owns this order
+        var isAuthorized = command.AssignedByRole == "Admin"
+            || (command.AssignedByRole == "Restaurant" && order.RestaurantId == command.AssignedById);
+
+        if (!isAuthorized)
+        {
+            return Result.Failure<OrderDto>(OrderErrors.Unauthorized);
+        }
+
         // Can only assign rider to active orders
         if (!order.Status.IsActive())
         {

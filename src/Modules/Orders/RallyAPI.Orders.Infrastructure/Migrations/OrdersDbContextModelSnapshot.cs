@@ -23,6 +23,111 @@ namespace RallyAPI.Orders.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.Cart", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<Guid>("RestaurantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("restaurant_id");
+
+                    b.Property<string>("RestaurantName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("restaurant_name");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_carts_customer_id");
+
+                    b.ToTable("carts", "orders");
+                });
+
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.CartItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<Guid>("CartId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cart_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("INR")
+                        .HasColumnName("currency");
+
+                    b.Property<Guid>("MenuItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("menu_item_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Options")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("SpecialInstructions")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("special_instructions");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CartId");
+
+                    b.HasIndex("MenuItemId")
+                        .HasDatabaseName("ix_cart_items_menu_item_id");
+
+                    b.ToTable("cart_items", "orders");
+                });
+
             modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.DeliveryInfo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -193,6 +298,12 @@ namespace RallyAPI.Orders.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("escalation_reason");
+
+                    b.Property<int>("FulfillmentType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("fulfillment_type");
 
                     b.Property<string>("InternalNotes")
                         .HasMaxLength(2000)
@@ -463,6 +574,12 @@ namespace RallyAPI.Orders.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<bool>("WebhookFailed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("webhook_failed");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId")
@@ -479,13 +596,235 @@ namespace RallyAPI.Orders.Infrastructure.Migrations
                     b.ToTable("payments", "orders");
                 });
 
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.Payout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BankAccountNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bank_account_number");
+
+                    b.Property<string>("BankIfscCode")
+                        .HasMaxLength(11)
+                        .HasColumnType("character varying(11)")
+                        .HasColumnName("bank_ifsc_code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("GrossOrderAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("gross_order_amount");
+
+                    b.Property<decimal>("NetPayoutAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("net_payout_amount");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("OrderCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_count");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("period_end");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalCommission")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("total_commission");
+
+                    b.Property<decimal>("TotalCommissionGst")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("total_commission_gst");
+
+                    b.Property<decimal>("TotalGstCollected")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("total_gst_collected");
+
+                    b.Property<decimal>("TotalTds")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("total_tds");
+
+                    b.Property<string>("TransactionReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("transaction_reference");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_payouts_owner_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_payouts_status");
+
+                    b.HasIndex("OwnerId", "PeriodStart", "PeriodEnd")
+                        .HasDatabaseName("ix_payouts_owner_period");
+
+                    b.ToTable("payouts", "orders");
+                });
+
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.PayoutLedger", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("CommissionAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("commission_amount");
+
+                    b.Property<decimal?>("CommissionFlatFee")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("commission_flat_fee");
+
+                    b.Property<decimal>("CommissionGst")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("commission_gst");
+
+                    b.Property<decimal>("CommissionPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("commission_percentage");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("INR")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("GstAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("gst_amount");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("net_amount");
+
+                    b.Property<decimal>("OrderAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("order_amount");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("OutletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("outlet_id");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<Guid?>("PayoutId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payout_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TdsAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("tds_amount");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payout_ledger_order_id");
+
+                    b.HasIndex("OutletId")
+                        .HasDatabaseName("ix_payout_ledger_outlet_id");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_payout_ledger_owner_id");
+
+                    b.HasIndex("PayoutId")
+                        .HasDatabaseName("ix_payout_ledger_payout_id");
+
+                    b.HasIndex("OwnerId", "Status")
+                        .HasDatabaseName("ix_payout_ledger_owner_status");
+
+                    b.ToTable("payout_ledger", "orders");
+                });
+
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.CartItem", b =>
+                {
+                    b.HasOne("RallyAPI.Orders.Domain.Entities.Cart", null)
+                        .WithMany("Items")
+                        .HasForeignKey("CartId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.DeliveryInfo", b =>
                 {
                     b.HasOne("RallyAPI.Orders.Domain.Entities.Order", null)
                         .WithOne("DeliveryInfo")
                         .HasForeignKey("RallyAPI.Orders.Domain.Entities.DeliveryInfo", "OrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.OwnsOne("RallyAPI.Orders.Domain.ValueObjects.Money", "QuotedDeliveryFee", b1 =>
                         {
@@ -931,10 +1270,22 @@ namespace RallyAPI.Orders.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.PayoutLedger", b =>
+                {
+                    b.HasOne("RallyAPI.Orders.Domain.Entities.Payout", null)
+                        .WithMany()
+                        .HasForeignKey("PayoutId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.Cart", b =>
+                {
+                    b.Navigation("Items");
+                });
+
             modelBuilder.Entity("RallyAPI.Orders.Domain.Entities.Order", b =>
                 {
-                    b.Navigation("DeliveryInfo")
-                        .IsRequired();
+                    b.Navigation("DeliveryInfo");
 
                     b.Navigation("Items");
                 });

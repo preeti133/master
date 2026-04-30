@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RallyAPI.Users.Domain.Entities;
 using RallyAPI.Users.Domain.ValueObjects;
@@ -18,6 +20,16 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
         builder.Property(r => r.Id)
             .HasColumnName("id")
             .ValueGeneratedNever();
+
+        // RstCode — short ops identifier (e.g. "RST001"). Unique, backfilled for legacy rows.
+        builder.Property(r => r.RstCode)
+            .HasColumnName("rst_code")
+            .HasMaxLength(20);
+
+        builder.HasIndex(r => r.RstCode)
+            .IsUnique()
+            .HasDatabaseName("idx_restaurants_rst_code")
+            .HasFilter("\"rst_code\" IS NOT NULL");
 
         // Name
         builder.Property(r => r.Name)
@@ -79,6 +91,12 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
             .HasDefaultValue(false)
             .IsRequired();
 
+        // AutoAcceptOrders
+        builder.Property(r => r.AutoAcceptOrders)
+            .HasColumnName("auto_accept_orders")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         // AvgPrepTimeMins
         builder.Property(r => r.AvgPrepTimeMins)
             .HasColumnName("avg_prep_time_mins")
@@ -94,11 +112,18 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
             .HasColumnName("closing_time")
             .IsRequired();
 
-        // Commission
+        // Commission (legacy — percentage of order subtotal)
         builder.Property(r => r.CommissionPercentage)
             .HasColumnName("commission_percentage")
             .HasPrecision(5, 2)
             .HasDefaultValue(20.00m)
+            .IsRequired();
+
+        // Commission flat fee (Phase 2 — ₹ per delivered order)
+        builder.Property(r => r.CommissionFlatFee)
+            .HasColumnName("commission_flat_fee")
+            .HasPrecision(10, 2)
+            .HasDefaultValue(30.00m)
             .IsRequired();
 
         // Base Entity properties
@@ -144,5 +169,108 @@ public class RestaurantConfiguration : IEntityTypeConfiguration<Restaurant>
         builder.Property(e => e.LogoFileKey)
                .HasColumnName("logo_file_key")
                .HasMaxLength(500);
+
+        // Owner link (multi-outlet support)
+        builder.Property(r => r.OwnerId)
+            .HasColumnName("owner_id");
+
+        builder.HasOne<RestaurantOwner>()
+            .WithMany()
+            .HasForeignKey(r => r.OwnerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // FSSAI compliance
+        builder.Property(r => r.FssaiNumber)
+            .HasColumnName("fssai_number")
+            .HasMaxLength(20);
+
+        // Cuisine/dietary attributes — jsonb requires explicit converter for List<string>
+        // (Npgsql 8.x maps List<string> to text[] by default, not jsonb)
+        builder.Property(r => r.CuisineTypes)
+            .HasColumnName("cuisine_types")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new(),
+                new ValueComparer<List<string>>(
+                    (a, b) => a != null && b != null && a.SequenceEqual(b),
+                    c => c.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                    c => c.ToList()));
+
+        builder.Property(r => r.IsPureVeg)
+            .HasColumnName("is_pure_veg")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.IsVeganFriendly)
+            .HasColumnName("is_vegan_friendly")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.HasJainOptions)
+            .HasColumnName("has_jain_options")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(r => r.MinOrderAmount)
+            .HasColumnName("min_order_amount")
+            .HasPrecision(10, 2)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
+        // Description
+        builder.Property(r => r.Description)
+            .HasColumnName("description")
+            .HasMaxLength(2000);
+
+        // Dietary type (enum stored as integer)
+        builder.Property(r => r.DietaryType)
+            .HasColumnName("dietary_type")
+            .HasConversion<int>()
+            .HasDefaultValue(Domain.Enums.DietaryType.Both)
+            .IsRequired();
+
+        // Delivery mode (enum stored as integer, default Hivago)
+        builder.Property(r => r.DeliveryMode)
+            .HasColumnName("delivery_mode")
+            .HasConversion<int>()
+            .HasDefaultValue(Domain.Enums.DeliveryMode.Hivago)
+            .IsRequired();
+
+        // Use custom weekly schedule flag
+        builder.Property(r => r.UseCustomSchedule)
+            .HasColumnName("use_custom_schedule")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        // Notification preferences — owned value object
+        builder.OwnsOne(r => r.Notifications, nav =>
+        {
+            nav.Property(n => n.EmailAlerts)
+                .HasColumnName("notify_email_alerts")
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            nav.Property(n => n.BrowserNotifications)
+                .HasColumnName("notify_browser")
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            nav.Property(n => n.OrderSound)
+                .HasColumnName("notify_order_sound")
+                .HasDefaultValue(true)
+                .IsRequired();
+        });
+
+        // Weekly schedule slots — one-to-many
+        builder.HasMany(r => r.ScheduleSlots)
+            .WithOne()
+            .HasForeignKey(s => s.RestaurantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Metadata
+            .FindNavigation(nameof(Restaurant.ScheduleSlots))!
+            .SetPropertyAccessMode(PropertyAccessMode.Field);
     }
 }

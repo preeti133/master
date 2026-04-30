@@ -28,6 +28,9 @@ public sealed class Order : AggregateRoot
     public OrderStatus Status { get; private set; }
     public PaymentStatus PaymentStatus { get; private set; }
 
+    // Fulfillment
+    public FulfillmentType FulfillmentType { get; private set; }
+
     // Items
     private readonly List<OrderItem> _items = new();
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
@@ -35,8 +38,8 @@ public sealed class Order : AggregateRoot
     // Pricing
     public OrderPricing Pricing { get; private set; }
 
-    // Delivery
-    public DeliveryInfo DeliveryInfo { get; private set; }
+    // Delivery (null for pickup orders)
+    public DeliveryInfo? DeliveryInfo { get; private set; }
 
     // Payment Reference
     public string? PaymentId { get; private set; }
@@ -85,10 +88,9 @@ public sealed class Order : AggregateRoot
         Guid restaurantId,
         string restaurantName,
         string? restaurantPhone,
-        DeliveryInfo deliveryInfo,
+        FulfillmentType fulfillmentType,
+        DeliveryInfo? deliveryInfo,
         OrderPricing pricing,
-        string? paymentId,
-        string? paymentTransactionId,
         string? deliveryQuoteId,
         string? specialInstructions)
     {
@@ -104,15 +106,14 @@ public sealed class Order : AggregateRoot
         RestaurantName = restaurantName;
         RestaurantPhone = restaurantPhone;
 
-        // Order starts as PAID (customer already paid)
-        Status = OrderStatus.Paid;
-        PaymentStatus = PaymentStatus.Paid;
+        // Order starts as PENDING — only webhook can transition to Paid
+        Status = OrderStatus.Pending;
+        PaymentStatus = PaymentStatus.Pending;
 
+        FulfillmentType = fulfillmentType;
         DeliveryInfo = deliveryInfo;
         Pricing = pricing;
 
-        PaymentId = paymentId;
-        PaymentTransactionId = paymentTransactionId;
         DeliveryQuoteId = deliveryQuoteId;
 
         SpecialInstructions = specialInstructions;
@@ -124,19 +125,18 @@ public sealed class Order : AggregateRoot
     #region Factory Methods
 
     /// <summary>
-    /// Creates a new paid order.
-    /// Called AFTER payment is successful.
+    /// Creates a new pending order awaiting payment.
+    /// Only the PayU webhook (after hash verification) can transition to Paid.
     /// </summary>
-    public static Order CreatePaidOrder(
+    public static Order CreatePendingOrder(
         OrderNumber orderNumber,
         Guid customerId,
         string customerName,
         Guid restaurantId,
         string restaurantName,
-        DeliveryInfo deliveryInfo,
         OrderPricing pricing,
-        string paymentId,
-        string? paymentTransactionId = null,
+        FulfillmentType fulfillmentType = FulfillmentType.Delivery,
+        DeliveryInfo? deliveryInfo = null,
         string? deliveryQuoteId = null,
         string? customerPhone = null,
         string? customerEmail = null,
@@ -155,14 +155,11 @@ public sealed class Order : AggregateRoot
         if (string.IsNullOrWhiteSpace(restaurantName))
             throw new ArgumentException("Restaurant name is required", nameof(restaurantName));
 
-        if (deliveryInfo is null)
-            throw new ArgumentNullException(nameof(deliveryInfo));
+        if (fulfillmentType == FulfillmentType.Delivery && deliveryInfo is null)
+            throw new ArgumentNullException(nameof(deliveryInfo), "Delivery info is required for delivery orders");
 
         if (pricing is null)
             throw new ArgumentNullException(nameof(pricing));
-
-        if (string.IsNullOrWhiteSpace(paymentId))
-            throw new ArgumentException("Payment ID is required", nameof(paymentId));
 
         var order = new Order(
             orderNumber,
@@ -173,10 +170,9 @@ public sealed class Order : AggregateRoot
             restaurantId,
             restaurantName.Trim(),
             restaurantPhone?.Trim(),
+            fulfillmentType,
             deliveryInfo,
             pricing,
-            paymentId,
-            paymentTransactionId,
             deliveryQuoteId,
             specialInstructions?.Trim());
 
@@ -218,6 +214,33 @@ public sealed class Order : AggregateRoot
     #region Status Transitions
 
     /// <summary>
+    /// Confirms payment and transitions order from Pending to Paid.
+    /// Called ONLY by the PayU webhook handler (after hash verification) or
+    /// the VerifyPayment handler (as a delayed-webhook safety net).
+    /// </summary>
+    public void ConfirmPayment(string paymentId, string? paymentTransactionId)
+    {
+        if (Status == OrderStatus.Paid)
+            return; // Idempotent
+
+        if (Status != OrderStatus.Pending)
+            throw new InvalidOperationException($"Cannot confirm payment for order in {Status} status");
+
+        if (string.IsNullOrWhiteSpace(paymentId))
+            throw new ArgumentException("Payment ID is required", nameof(paymentId));
+
+        Status = OrderStatus.Paid;
+        PaymentStatus = PaymentStatus.Paid;
+        PaymentId = paymentId;
+        PaymentTransactionId = paymentTransactionId;
+        UpdatedAt = DateTime.UtcNow;
+
+        AddDomainEvent(new OrderPaidEvent(
+            Id, OrderNumber.Value, CustomerId, RestaurantId,
+            Pricing.Total.Amount, _items.Count));
+    }
+
+    /// <summary>
     /// Restaurant confirms/accepts the order.
     /// </summary>
     public void Confirm()
@@ -234,13 +257,13 @@ public sealed class Order : AggregateRoot
     /// <summary>
     /// Restaurant rejects the order.
     /// </summary>
-    public void Reject(string? reason = null)
+    public void Reject(string reason)
     {
         if (!Status.CanBeRejected())
             throw new InvalidOperationException($"Cannot reject order in {Status} status");
 
         Status = OrderStatus.Rejected;
-        RejectionReason = reason?.Trim();
+        RejectionReason = reason.Trim();
         RejectedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
 
@@ -276,11 +299,17 @@ public sealed class Order : AggregateRoot
     }
 
     /// <summary>
-    /// Marks order as picked up by rider.
+    /// Marks order as picked up by rider. Only valid for delivery orders.
     /// </summary>
     public void MarkPickedUp()
     {
+        if (FulfillmentType == FulfillmentType.Pickup)
+            throw new InvalidOperationException("Pickup orders do not have a rider pickup step. Use MarkDelivered instead.");
+
         EnsureValidTransition(OrderStatus.PickedUp);
+
+        if (DeliveryInfo is null || !DeliveryInfo.RiderId.HasValue || DeliveryInfo.RiderId == Guid.Empty)
+            throw new InvalidOperationException("Cannot mark order as picked up: no rider has been assigned.");
 
         Status = OrderStatus.PickedUp;
         PickedUpAt = DateTime.UtcNow;
@@ -291,7 +320,7 @@ public sealed class Order : AggregateRoot
     }
 
     /// <summary>
-    /// Marks order as delivered.
+    /// Marks order as delivered (by rider) or collected (by customer for pickup orders).
     /// </summary>
     public void MarkDelivered()
     {
@@ -300,36 +329,53 @@ public sealed class Order : AggregateRoot
         Status = OrderStatus.Delivered;
         DeliveredAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
-        DeliveryInfo.MarkDelivered();
+        DeliveryInfo?.MarkDelivered();
 
-        AddDomainEvent(new OrderDeliveredEvent(Id, OrderNumber.Value, CustomerId, DeliveryInfo.RiderId));
+        AddDomainEvent(new OrderDeliveredEvent(Id, OrderNumber.Value, CustomerId, DeliveryInfo?.RiderId));
     }
 
     /// <summary>
-    /// Assigns a rider to the order.
+    /// Assigns a rider to the order. Only valid for delivery orders.
     /// </summary>
     public void AssignRider(Guid? riderId, string? riderName = null, string? riderPhone = null, string? trackingUrl = null)
     {
-        // 3PL might not have a Guid RiderId, so we use empty for domestic consistency if needed
-        // but DeliveryInfo.AssignRider requires it. If null/empty, we handle gracefully.
+        if (FulfillmentType == FulfillmentType.Pickup)
+            throw new InvalidOperationException("Cannot assign rider to a pickup order");
+
+        if (DeliveryInfo is null)
+            throw new InvalidOperationException("Cannot assign rider: no delivery info");
+
         DeliveryInfo.AssignRider(riderId ?? Guid.Empty, riderName, riderPhone);
-        
+
         if (!string.IsNullOrWhiteSpace(trackingUrl))
         {
             DeliveryInfo.SetTrackingUrl(trackingUrl);
         }
-        
+
         UpdatedAt = DateTime.UtcNow;
-        
+
         AddDomainEvent(new RiderAssignedEvent(Id, OrderNumber.Value, riderId ?? Guid.Empty));
     }
 
     /// <summary>
     /// Cancels the order.
     /// </summary>
-    public void Cancel(CancellationReason reason, Guid? cancelledBy = null, string? notes = null)
+    /// <param name="allowAnyActive">
+    /// When true, allows cancellation from any non-terminal state (Preparing, ReadyForPickup,
+    /// PickedUp). Reserved for admin-overridden cancellations. When false (default),
+    /// only the normal allowlist (Pending/Paid/Confirmed) applies.
+    /// </param>
+    public void Cancel(
+        CancellationReason reason,
+        Guid? cancelledBy = null,
+        string? notes = null,
+        bool allowAnyActive = false)
     {
-        if (!Status.CanBeCancelled())
+        var canCancel = allowAnyActive
+            ? !Status.IsTerminal()
+            : Status.CanBeCancelled();
+
+        if (!canCancel)
             throw new InvalidOperationException($"Cannot cancel order in {Status} status");
 
         Status = OrderStatus.Cancelled;
@@ -392,15 +438,19 @@ public sealed class Order : AggregateRoot
 
     /// <summary>
     /// Gets valid status transitions from current status.
+    /// Pickup orders skip PickedUp and go directly ReadyForPickup → Delivered.
     /// </summary>
     public IReadOnlyList<OrderStatus> GetValidTransitions()
     {
         return Status switch
         {
+            OrderStatus.Pending => new[] { OrderStatus.Paid, OrderStatus.Cancelled },
             OrderStatus.Paid => new[] { OrderStatus.Confirmed, OrderStatus.Rejected, OrderStatus.Cancelled },
             OrderStatus.Confirmed => new[] { OrderStatus.Preparing, OrderStatus.Cancelled },
             OrderStatus.Preparing => new[] { OrderStatus.ReadyForPickup },
-            OrderStatus.ReadyForPickup => new[] { OrderStatus.PickedUp },
+            OrderStatus.ReadyForPickup => FulfillmentType == FulfillmentType.Pickup
+                ? new[] { OrderStatus.Delivered }
+                : new[] { OrderStatus.PickedUp },
             OrderStatus.PickedUp => new[] { OrderStatus.Delivered, OrderStatus.Failed },
             _ => Array.Empty<OrderStatus>()
         };
@@ -417,6 +467,9 @@ public sealed class Order : AggregateRoot
     {
         if (Status.IsTerminal())
             throw new InvalidOperationException("Cannot update rider for completed order");
+
+        if (FulfillmentType == FulfillmentType.Pickup || DeliveryInfo is null)
+            throw new InvalidOperationException("Cannot update rider for a pickup order");
 
         DeliveryInfo.AssignRider(riderId ?? Guid.Empty, riderName, riderPhone);
         UpdatedAt = DateTime.UtcNow;
@@ -449,24 +502,16 @@ public sealed class Order : AggregateRoot
     #region Finalization
 
     /// <summary>
-    /// Finalizes the order after all items are set.
-    /// Raises OrderPaidEvent (order is ready for restaurant).
+    /// Validates the order after all items are set.
+    /// Called during order creation to ensure order is valid before persisting.
     /// </summary>
-    public void FinalizeOrder()
+    public void ValidateOrder()
     {
         if (!_items.Any())
-            throw new InvalidOperationException("Cannot finalize order without items");
+            throw new InvalidOperationException("Cannot create order without items");
 
         if (Pricing.Total.Amount <= 0)
             throw new InvalidOperationException("Order total must be greater than zero");
-
-        AddDomainEvent(new OrderPaidEvent(
-            Id,
-            OrderNumber.Value,
-            CustomerId,
-            RestaurantId,
-            Pricing.Total.Amount,
-            _items.Count));
     }
 
     #endregion

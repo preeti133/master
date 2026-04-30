@@ -9,6 +9,8 @@
 # Ignore appsettings (environment-specific secrets)
 appsettings.json
 appsettings.*.json
+appsettings.Development.json
+appsettings.*.Development.json
 
 
 # dotenv files
@@ -494,3 +496,4 @@ $RECYCLE.BIN/
 
 Keys/
 *.pem
+appsettings.Development.json

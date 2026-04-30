@@ -1,9 +1,10 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using RallyAPI.Orders.Application.Abstractions;
+using RallyAPI.SharedKernel.Abstractions;
 using RallyAPI.Orders.Application.Commands.AssignRider;
 using RallyAPI.Orders.Application.Commands.CancelOrder;
 using RallyAPI.Orders.Application.Commands.ConfirmOrder;
@@ -12,15 +13,25 @@ using RallyAPI.Orders.Application.Commands.RejectOrder;
 using RallyAPI.Orders.Application.Commands.UpdateOrderStatus;
 using RallyAPI.Orders.Application.DTOs;
 using RallyAPI.Orders.Application.DTOs.Requests;
+using RallyAPI.Orders.Application.Queries.GetOrderNotes;
+using RallyAPI.Orders.Application.Queries.GetOrdersByCustomer;
+using RallyAPI.Orders.Application.Commands.AddOrderNote;
 using RallyAPI.Orders.Application.Queries.GetActiveOrders;
+using RallyAPI.Orders.Application.Queries.GetFilteredOrders;
 using RallyAPI.Orders.Application.Queries.GetOrderById;
 using RallyAPI.Orders.Application.Queries.GetOrderByNumber;
+using RallyAPI.Orders.Application.Queries.GetOrderNotes;
 using RallyAPI.Orders.Application.Queries.GetOrdersByCustomer;
 using RallyAPI.Orders.Application.Queries.GetOrdersByRestaurant;
 using RallyAPI.Orders.Domain.Enums;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using RallyAPI.SharedKernel.Abstractions.Distance;
 using RallyAPI.SharedKernel.Abstractions.Pricing;
+using RallyAPI.SharedKernel.Extensions;
 using RallyAPI.SharedKernel.Results;
+using RallyAPI.SharedKernel.Filters;
 
 namespace RallyAPI.Orders.Endpoints;
 
@@ -40,6 +51,8 @@ public static class OrderEndpoints
             .WithName("PlaceOrder")
             .WithSummary("Place a new order")
             .RequireAuthorization("Customer")
+            .RequireRateLimiting("login")
+            .RequireIdempotency()
             .Produces<OrderDto>(StatusCodes.Status201Created)
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
             .Produces<ProblemDetails>(StatusCodes.Status401Unauthorized);
@@ -80,6 +93,29 @@ public static class OrderEndpoints
             .WithSummary("Get all active orders")
             .RequireAuthorization("Admin")
             .Produces<IReadOnlyList<OrderSummaryDto>>();
+
+        // Filtered Orders (Admin)
+        group.MapGet("/", GetFilteredOrders)
+            .WithName("GetFilteredOrders")
+            .WithSummary("Get filtered order history")
+            .RequireAuthorization("Admin")
+            .Produces<PagedResult<OrderSummaryDto>>();
+
+        // Add Order Note (Admin)
+        group.MapPost("/{orderId:guid}/notes", AddOrderNote)
+            .WithName("AddOrderNote")
+            .WithSummary("Add an admin note to an order")
+            .RequireAuthorization("Admin")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+        // Get Order Notes (Admin)
+        group.MapGet("/{orderId:guid}/notes", GetOrderNotes)
+            .WithName("GetOrderNotes")
+            .WithSummary("Get admin notes for an order")
+            .RequireAuthorization("Admin")
+            .Produces<OrderNotesResponse>()
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
 
         // Confirm Order (Restaurant)
         group.MapPut("/{orderId:guid}/confirm", ConfirmOrder)
@@ -130,6 +166,14 @@ public static class OrderEndpoints
             .Produces<OrderDto>()
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
 
+        // Mark Customer Picked Up (Restaurant/Admin — for pickup orders)
+        group.MapPut("/{orderId:guid}/customer-pickup", MarkCustomerPickedUp)
+            .WithName("MarkCustomerPickedUp")
+            .WithSummary("Mark pickup order as collected by customer")
+            .RequireAuthorization("AdminOrRestaurant")
+            .Produces<OrderDto>()
+            .Produces<ProblemDetails>(StatusCodes.Status400BadRequest);
+
         // Cancel Order
         group.MapPut("/{orderId:guid}/cancel", CancelOrder)
             .WithName("CancelOrder")
@@ -149,50 +193,53 @@ public static class OrderEndpoints
 
 
 
-        app.MapGet("/api/test/distance", async (
-    IDistanceCalculator distanceCalculator,
-    IDeliveryPricingCalculator pricingCalculator) =>
+        var env = app.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+        if (env.IsDevelopment())
         {
-            // Test: Connaught Place → India Gate (Delhi)
-            var distance = await distanceCalculator.GetDistanceAsync(
-                28.6315, 77.2167,  // Connaught Place
-                28.6129, 77.2295); // India Gate
-
-            var pricing = await pricingCalculator.CalculateAsync(new DeliveryPriceRequest
+            app.MapGet("/api/test/distance", async (
+                IDistanceCalculator distanceCalculator,
+                IDeliveryPricingCalculator pricingCalculator) =>
             {
-                PickupLatitude = 28.6315,
-                PickupLongitude = 77.2167,
-                DropLatitude = 28.6129,
-                DropLongitude = 77.2295,
-                City = "Delhi",
-                OrderAmount = 500
-            });
+                var distance = await distanceCalculator.GetDistanceAsync(
+                    28.6315, 77.2167,
+                    28.6129, 77.2295);
 
-            return Results.Ok(new
-            {
-                Distance = new
+                var pricing = await pricingCalculator.CalculateAsync(new DeliveryPriceRequest
                 {
-                    distance.DistanceKm,
-                    distance.DurationMinutes,
-                    distance.DistanceText,
-                    distance.DurationText,
-                    distance.IsSuccess,
-                    distance.ErrorMessage
-                },
-                Pricing = new
+                    PickupLatitude = 28.6315,
+                    PickupLongitude = 77.2167,
+                    DropLatitude = 28.6129,
+                    DropLongitude = 77.2295,
+                    City = "Delhi",
+                    OrderAmount = 500
+                });
+
+                return Results.Ok(new
                 {
-                    pricing.FinalFee,
-                    pricing.BaseFee,
-                    pricing.DistanceKm,
-                    pricing.EstimatedMinutes,
-                    pricing.QuoteId,
-                    pricing.Breakdown,
-                    pricing.IsSuccess,
-                    pricing.ErrorMessage
-                }
-            });
-        })
-.WithTags("Test");
+                    Distance = new
+                    {
+                        distance.DistanceKm,
+                        distance.DurationMinutes,
+                        distance.DistanceText,
+                        distance.DurationText,
+                        distance.IsSuccess,
+                        distance.ErrorMessage
+                    },
+                    Pricing = new
+                    {
+                        pricing.FinalFee,
+                        pricing.BaseFee,
+                        pricing.DistanceKm,
+                        pricing.EstimatedMinutes,
+                        pricing.QuoteId,
+                        pricing.Breakdown,
+                        pricing.IsSuccess,
+                        pricing.ErrorMessage
+                    }
+                });
+            })
+            .WithTags("Test");
+        }
 
         return app;
     }
@@ -214,51 +261,50 @@ public static class OrderEndpoints
         var command = PlaceOrderCommand.Create(
             customerId: currentUser.UserId.Value,
             customerName: currentUser.UserName ?? "Customer",
-            paymentId: request.PaymentId,
             request: request,
-            paymentTransactionId: request.PaymentTransactionId,
             deliveryQuoteId: request.DeliveryQuoteId,
             customerPhone: currentUser.Phone,
             customerEmail: currentUser.Email);
-
-
-        //var command = PlaceOrderCommand.Create(
-        //    currentUser.UserId.Value,
-        //    currentUser.UserName ?? "Customer",
-        //     paymentId: request.PaymentId,
-        //    request,
-        //    currentUser.Phone,
-        //    currentUser.Email);
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Created($"/api/orders/{result.Value.Id}", result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> GetOrderById(
         Guid orderId,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new GetOrderByIdQuery(orderId), cancellationToken);
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var callerRole = GetCallerRole(currentUser);
+        var result = await mediator.Send(new GetOrderByIdQuery(orderId, currentUser.UserId.Value, callerRole), cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.NotFound(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> GetOrderByNumber(
         string orderNumber,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new GetOrderByNumberQuery(orderNumber), cancellationToken);
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var callerRole = GetCallerRole(currentUser);
+        var result = await mediator.Send(new GetOrderByNumberQuery(orderNumber, currentUser.UserId.Value, callerRole), cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.NotFound(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> GetMyOrders(
@@ -284,7 +330,7 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> GetRestaurantOrders(
@@ -307,7 +353,7 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> GetActiveOrders(
@@ -324,7 +370,7 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> ConfirmOrder(
@@ -343,7 +389,7 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> StartPreparing(
@@ -357,14 +403,14 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.Preparing,
             ActorId = currentUser.UserId,
-            ActorRole = "Restaurant"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> MarkReadyForPickup(
@@ -378,20 +424,21 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.ReadyForPickup,
             ActorId = currentUser.UserId,
-            ActorRole = "Restaurant"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> AssignRider(
         Guid orderId,
         [FromBody] AssignRiderRequest request,
         IMediator mediator,
+        ICurrentUserService currentUser,
         CancellationToken cancellationToken)
     {
         var command = new AssignRiderCommand
@@ -399,14 +446,16 @@ public static class OrderEndpoints
             OrderId = orderId,
             RiderId = request.RiderId,
             RiderName = request.RiderName,
-            RiderPhone = request.RiderPhone
+            RiderPhone = request.RiderPhone,
+            AssignedById = currentUser.UserId,
+            AssignedByRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> MarkPickedUp(
@@ -420,14 +469,14 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.PickedUp,
             ActorId = currentUser.UserId,
-            ActorRole = "Rider"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> MarkDelivered(
@@ -441,14 +490,14 @@ public static class OrderEndpoints
             OrderId = orderId,
             TargetStatus = OrderStatus.Delivered,
             ActorId = currentUser.UserId,
-            ActorRole = "Rider"
+            ActorRole = GetCallerRole(currentUser)
         };
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
 
     private static async Task<IResult> CancelOrder(
@@ -462,6 +511,7 @@ public static class OrderEndpoints
         {
             OrderId = orderId,
             CancelledBy = currentUser.UserId ?? Guid.Empty,
+            CallerRole = GetCallerRole(currentUser),
             Reason = request.Reason,
             Notes = request.Notes
         };
@@ -470,34 +520,102 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> GetFilteredOrders(
+        [FromQuery] string? status,
+        [FromQuery] Guid? restaurantId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? search,
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        OrderStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<OrderStatus>(status, true, out var s))
+            parsedStatus = s;
+
+        var query = new GetFilteredOrdersQuery
+        {
+            Status = parsedStatus,
+            RestaurantId = restaurantId,
+            From = from,
+            To = to,
+            Search = search,
+            Page = page > 0 ? page : 1,
+            PageSize = pageSize > 0 ? Math.Min(pageSize, 100) : 20
+        };
+
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> AddOrderNote(
+        Guid orderId,
+        [FromBody] AddOrderNoteRequest request,
+        IMediator mediator,
+        ICurrentUserService currentUser,
+        CancellationToken cancellationToken)
+    {
+        if (!currentUser.UserId.HasValue)
+            return Results.Unauthorized();
+
+        var command = new AddOrderNoteCommand(orderId, currentUser.UserId.Value, request.Note);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error.ToErrorResult();
+    }
+
+    private static async Task<IResult> GetOrderNotes(
+        Guid orderId,
+        IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetOrderNotesQuery(orderId), cancellationToken);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToErrorResult();
     }
 
     #endregion
 
-    #region Helper Methods
-
-    private static ProblemDetails CreateProblemDetails(Error error)
+    private static async Task<IResult> MarkCustomerPickedUp(
+        Guid orderId,
+        IMediator mediator,
+        ICurrentUserService currentUser,
+        CancellationToken cancellationToken)
     {
-        return new ProblemDetails
+        var command = new UpdateOrderStatusCommand
         {
-            Title = error.Code,
-            Detail = error.Message,
-            Status = GetStatusCode(error.Code)
+            OrderId = orderId,
+            TargetStatus = OrderStatus.Delivered,
+            ActorId = currentUser.UserId,
+            ActorRole = GetCallerRole(currentUser)
         };
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToErrorResult();
     }
 
-    private static int GetStatusCode(string errorCode)
+    private static string GetCallerRole(ICurrentUserService currentUser)
     {
-        return errorCode switch
-        {
-            var code when code.Contains("NotFound") => StatusCodes.Status404NotFound,
-            var code when code.Contains("Unauthorized") => StatusCodes.Status401Unauthorized,
-            var code when code.Contains("Forbidden") => StatusCodes.Status403Forbidden,
-            var code when code.Contains("Validation") => StatusCodes.Status400BadRequest,
-            var code when code.Contains("Conflict") => StatusCodes.Status409Conflict,
-            _ => StatusCodes.Status400BadRequest
-        };
+        if (currentUser.IsAdmin) return "Admin";
+        if (currentUser.IsRestaurant) return "Restaurant";
+        if (currentUser.IsRider) return "Rider";
+        if (currentUser.IsCustomer) return "Customer";
+        return string.Empty;
     }
 
     private static async Task<IResult> RejectOrder(
@@ -520,8 +638,6 @@ public static class OrderEndpoints
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : Results.BadRequest(CreateProblemDetails(result.Error));
+            : result.Error.ToErrorResult();
     }
-
-    #endregion
 }

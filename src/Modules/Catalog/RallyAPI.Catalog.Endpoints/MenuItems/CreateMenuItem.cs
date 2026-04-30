@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using RallyAPI.Catalog.Application.MenuItems.Commands.CreateMenuItem;
+using RallyAPI.SharedKernel.Extensions;
 
 namespace RallyAPI.Catalog.Endpoints.MenuItems;
 
@@ -23,7 +24,7 @@ public class CreateMenuItem : IEndpoint
         ISender sender,
         CancellationToken ct)
     {
-        var restaurantId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var restaurantId = Guid.Parse(user.FindFirstValue("sub")!);
 
         var command = new CreateMenuItemCommand(
             restaurantId,
@@ -39,13 +40,25 @@ public class CreateMenuItem : IEndpoint
                 o.Name,
                 o.Type,
                 o.AdditionalPrice,
-                o.IsDefault)).ToList());
+                o.IsDefault)).ToList(),
+            request.OptionGroups?.Select(g => new OptionGroupDto(
+                g.GroupName,
+                g.IsRequired,
+                g.MinSelections,
+                g.MaxSelections,
+                g.DisplayOrder,
+                g.Options.Select(o => new MenuItemOptionDto(
+                    o.Name,
+                    o.Type,
+                    o.AdditionalPrice,
+                    o.IsDefault)).ToList())).ToList(),
+            request.Tags);
 
         var result = await sender.Send(command, ct);
 
         return result.IsSuccess
             ? Results.Created($"/api/items/{result.Value.MenuItemId}", result.Value)
-            : Results.BadRequest(result.Error);
+            : result.Error.ToErrorResult();
     }
 }
 
@@ -58,10 +71,20 @@ public record CreateMenuItemRequest(
     int DisplayOrder,
     bool IsVegetarian,
     int PreparationTimeMinutes,
-    List<MenuItemOptionRequest>? Options);
+    List<MenuItemOptionRequest>? Options,
+    List<OptionGroupRequest>? OptionGroups,
+    List<string>? Tags);
 
 public record MenuItemOptionRequest(
     string Name,
     string Type,
     decimal AdditionalPrice,
     bool IsDefault);
+
+public record OptionGroupRequest(
+    string GroupName,
+    bool IsRequired,
+    int MinSelections,
+    int MaxSelections,
+    int DisplayOrder,
+    List<MenuItemOptionRequest> Options);

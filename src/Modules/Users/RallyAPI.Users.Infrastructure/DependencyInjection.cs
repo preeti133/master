@@ -9,6 +9,7 @@ using RallyAPI.SharedKernel.Abstractions.Riders;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using StackExchange.Redis;
 using RallyAPI.SharedKernel.Abstractions.Restaurants;
+using RallyAPI.Users.Infrastructure.BackgroundServices;
 namespace RallyAPI.Users.Infrastructure;
 
 public static class DependencyInjection
@@ -62,9 +63,13 @@ public static class DependencyInjection
         services.AddScoped<IRiderRepository, RiderRepository>();
         services.AddScoped<IRestaurantRepository, RestaurantRepository>();
         services.AddScoped<IAdminRepository, AdminRepository>();
+        services.AddScoped<IRestaurantOwnerRepository, RestaurantOwnerRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IRestaurantQueryService, RestaurantQueryService>();
+        services.AddScoped<IRestaurantCodeGenerator, RestaurantCodeGenerator>();
+        services.AddScoped<IRiderPayoutLedgerRepository, RiderPayoutLedgerRepository>();
+        services.AddScoped<IRiderPayoutQueryService, RiderPayoutQueryService>();
 
 
         // Rider services for cross-module communication
@@ -108,6 +113,9 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IOtpService, OtpService>();
+        services.Configure<RiderPayoutDispatchOptions>(
+            configuration.GetSection(RiderPayoutDispatchOptions.SectionName));
+        services.AddHostedService<RiderPayoutAggregationJob>();
 
         return services;
     }

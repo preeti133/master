@@ -12,4 +12,5 @@ public sealed record UpdateCustomerAddressCommand(
     string? Landmark,
     decimal Latitude,
     decimal Longitude,
-    string Label) : IRequest<Result>;
+    string Label,
+    string? PlaceId = null) : IRequest<Result>;

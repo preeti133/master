@@ -3,14 +3,17 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RallyAPI.Orders.Application.Abstractions;
+using RallyAPI.Orders.Application.Cart.Abstractions;
+using RallyAPI.SharedKernel.Abstractions;
 using RallyAPI.Orders.Domain.Abstractions;
 using RallyAPI.Orders.Domain.Repositories;
 using RallyAPI.Orders.Infrastructure.BackgroundServices;
 using RallyAPI.Orders.Infrastructure.Persistence.Repositories;
 using RallyAPI.Orders.Infrastructure.Repositories;
 using RallyAPI.Orders.Infrastructure.Services;
-using RallyAPI.Orders.Application.Abstractions;
 using RallyAPI.Orders.Infrastructure.Services.PayU;
+using RallyAPI.SharedKernel.Abstractions.Orders;
+using StackExchange.Redis;
 
 namespace RallyAPI.Orders.Infrastructure;
 
@@ -53,9 +56,31 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<ICartRepository, CartRepository>();
+        services.AddScoped<IPayoutRepository, PayoutRepository>();
+        services.AddScoped<IPayoutLedgerRepository, PayoutLedgerRepository>();
+
+        // Cart Cache (Redis write-through)
+        services.AddScoped<ICartCacheService, RedisCartCacheService>();
+
+        // Cart cleanup background service
+        services.AddHostedService<CartCleanupService>();
+
+        // Weekly payout batch creation (Mondays 6 AM IST)
+        services.AddHostedService<WeeklyPayoutBatchService>();
 
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Cross-module services (consumed by admin queries via SharedKernel abstractions)
+        services.AddScoped<IOrderStatsService, OrderStatsService>();
+        services.AddScoped<IEscalatedOrderQueryService, EscalatedOrderQueryService>();
+        services.AddScoped<ILiveOrderFeedService, LiveOrderFeedService>();
+        services.AddScoped<IAdminAlertsService, AdminAlertsService>();
+        services.AddScoped<IAdminOrderQueryService, AdminOrderQueryService>();
+        services.AddScoped<IDeliveryEarningsQueryService, DeliveryEarningsQueryService>();
+        services.AddScoped<RallyAPI.SharedKernel.Abstractions.Payouts.IPayoutGateway, StubPayoutGateway>();
+        services.AddScoped<RallyAPI.SharedKernel.Abstractions.Payouts.IAdminPayoutQueryService, AdminPayoutQueryService>();
 
         // Services
         services.AddScoped<IOrderNumberGenerator, OrderNumberGenerator>();

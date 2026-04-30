@@ -10,19 +10,22 @@ public sealed class Address : ValueObject
     public decimal Latitude { get; }
     public decimal Longitude { get; }
     public string Label { get; } // Home, Work, Other
+    public string? PlaceId { get; } // Google Places ID for re-fetching details
 
     private Address(
         string addressLine,
         string? landmark,
         decimal latitude,
         decimal longitude,
-        string label)
+        string label,
+        string? placeId)
     {
         AddressLine = addressLine;
         Landmark = landmark;
         Latitude = latitude;
         Longitude = longitude;
         Label = label;
+        PlaceId = placeId;
     }
 
     public static Result<Address> Create(
@@ -30,7 +33,8 @@ public sealed class Address : ValueObject
         string? landmark,
         decimal latitude,
         decimal longitude,
-        string? label)
+        string? label,
+        string? placeId = null)
     {
         if (string.IsNullOrWhiteSpace(addressLine))
             return Result.Failure<Address>(Error.Validation("Address line is required."));
@@ -47,7 +51,7 @@ public sealed class Address : ValueObject
 
         var validLabels = new[] { "Home", "Work", "Other" };
         var normalizedLabel = label?.Trim() ?? "Other";
-        
+
         if (!validLabels.Contains(normalizedLabel, StringComparer.OrdinalIgnoreCase))
             normalizedLabel = "Other";
 
@@ -56,7 +60,8 @@ public sealed class Address : ValueObject
             landmark?.Trim(),
             latitude,
             longitude,
-            normalizedLabel);
+            normalizedLabel,
+            placeId?.Trim());
     }
 
     protected override IEnumerable<object> GetEqualityComponents()
@@ -66,5 +71,6 @@ public sealed class Address : ValueObject
         yield return Latitude;
         yield return Longitude;
         yield return Label;
+        yield return PlaceId ?? string.Empty;
     }
 }

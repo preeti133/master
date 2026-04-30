@@ -1,12 +1,8 @@
-﻿
-using MediatR;
+﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RallyAPI.Users.Application.Abstractions;
 using StackExchange.Redis;
-using System.Collections.Generic;
-using System.Numerics;
 using System.Security.Cryptography;
-using static System.Net.WebRequestMethods;
 
 namespace RallyAPI.Users.Infrastructure.Services;
 
@@ -15,6 +11,7 @@ public class OtpService : IOtpService
     private readonly IDatabase _redis;
     private readonly ILogger<OtpService> _logger;
     private readonly ISmsService _smsService;
+    private readonly bool _useFixedOtp;
 
     // Configuration
     private const int OtpExpiryMinutes = 5;
@@ -23,11 +20,17 @@ public class OtpService : IOtpService
     private const int RateLimitPerPhone = 3;      // max 3 OTPs per phone per 10 min
     private const int RateLimitWindowMinutes = 10;
 
-    public OtpService(IConnectionMultiplexer redis, ISmsService smsService, ILogger<OtpService> logger)
+    public OtpService(
+        IConnectionMultiplexer redis,
+        ISmsService smsService,
+        ILogger<OtpService> logger,
+        IHostEnvironment environment)
     {
         _redis = redis.GetDatabase();
         _smsService = smsService;
         _logger = logger;
+        _useFixedOtp = environment.IsDevelopment()
+            || environment.EnvironmentName == "Testing";
     }
 
     public async Task<string> GenerateAndSendOtpAsync(
@@ -60,20 +63,24 @@ public class OtpService : IOtpService
         await _redis.StringSetAsync(
             $"otp:code:{phoneKey}",
             hashedOtp,
-            TimeSpan.FromMinutes(OtpExpiryMinutes));
+            TimeSpan.FromMinutes(OtpExpiryMinutes),
+            When.Always,
+            CommandFlags.None);
 
         // Reset attempt counter
         await _redis.StringSetAsync(
             $"otp:attempts:{phoneKey}",
             0,
-            TimeSpan.FromMinutes(OtpExpiryMinutes));
+            TimeSpan.FromMinutes(OtpExpiryMinutes),
+            When.Always,
+            CommandFlags.None);
 
         // Increment rate limit counter
         await _redis.StringIncrementAsync(rateKey);
         // Set expiry only if this is the first request in the window
         if (!currentRate.HasValue)
         {
-            await _redis.KeyExpireAsync(rateKey, TimeSpan.FromMinutes(RateLimitWindowMinutes));
+            await _redis.KeyExpireAsync(rateKey, TimeSpan.FromMinutes(RateLimitWindowMinutes), CommandFlags.None);
         }
 
         // TODO: Send via SMS provider (Twilio/MSG91)
@@ -119,7 +126,9 @@ public class OtpService : IOtpService
             await _redis.StringSetAsync(
                 $"otp:lock:{phoneKey}",
                 "locked",
-                TimeSpan.FromMinutes(LockoutMinutes));
+                TimeSpan.FromMinutes(LockoutMinutes),
+                When.Always,
+                CommandFlags.None);
 
             // Clean up OTP keys
             await CleanupKeys(phoneKey);
@@ -148,24 +157,13 @@ public class OtpService : IOtpService
         await _redis.KeyDeleteAsync($"otp:attempts:{phoneKey}");
     }
 
-    private static string GenerateOtp()
+    private string GenerateOtp()
     {
-#if DEBUG
-        return "123456"; // Fixed OTP for development
-#else
-        // Cryptographically secure random number
-        return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-#endif
-
-        //   var message = $"{otp} is your OTP for Rally. Valid for 5 minutes. Do not share.";
-        //   var sent = await _smsService.SendAsync(phone, message, cancellationToken);
-        //
-        //   if (!sent)
-        //   {
-        //       _logger.LogError("Failed to send OTP SMS to {Phone}", phone);
-        //       // Don't fail the operation — OTP is stored in Redis, user can retry
-        //       // In production, you might want to return an error here
-        //   }
+        // TODO: switch to random OTP once MSG91 WhatsApp is approved by Meta
+        // if (_useFixedOtp)
+        //     return "123456";
+        // return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+        return "123456";
     }
 
     private static string HashOtp(string otp)

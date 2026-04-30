@@ -6,21 +6,54 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RallyAPI.Catalog.Endpoints;
 using RallyAPI.Delivery.Endpoints;
+using RallyAPI.Host.DevEndpoints;
+using RallyAPI.Host.Hubs;
+using RallyAPI.Host.Services;
 using RallyAPI.Infrastructure;
 using RallyAPI.Integrations.ProRouting;
 using RallyAPI.Orders.Endpoints;
 using RallyAPI.Pricing.Infrastructure;
+using RallyAPI.SharedKernel.Abstractions.Notifications;
 using RallyAPI.SharedKernel.Extensions;
 using RallyAPI.SharedKernel.Infrastructure;
 using RallyAPI.Users.Endpoints;
+using Serilog;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
+// Bootstrap logger — captures startup errors before the host is built
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .Enrich.WithEnvironmentName()
+    .Enrich.WithThreadId());
+
+// Serialize enums as strings in all HTTP responses (minimal API + TypedResults)
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
 builder.Services.AddHttpContextAccessor();
+
+// SignalR
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<ConnectionTracker>();
 
 builder.Services.AddScoped<DomainEventInterceptor>();
 builder.Services.AddScoped<Microsoft.EntityFrameworkCore.Diagnostics.ISaveChangesInterceptor>(sp => 
@@ -43,16 +76,29 @@ builder.Services.AddDeliveryModule(builder.Configuration);
 
 // Add Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var publicKeyPath = Path.Combine(AppContext.BaseDirectory, jwtSettings["PublicKeyPath"]!);
-var publicKeyText = File.ReadAllText(publicKeyPath);
 var rsa = RSA.Create();
-rsa.ImportFromPem(publicKeyText);
+var publicKeyPem = jwtSettings["PublicKeyPem"];
+if (!string.IsNullOrWhiteSpace(publicKeyPem))
+{
+    // Railway: key injected as env var JwtSettings__PublicKeyPem
+    rsa.ImportFromPem(publicKeyPem.Replace("\\n", "\n"));
+}
+else
+{
+    // Local dev: read from file
+    var publicKeyPath = Path.Combine(AppContext.BaseDirectory, jwtSettings["PublicKeyPath"]!);
+    rsa.ImportFromPem(File.ReadAllText(publicKeyPath));
+}
 
 
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Prevent .NET from remapping "sub" → ClaimTypes.NameIdentifier etc.
+        // This keeps JWT claim names as-is so FindFirst("sub") works everywhere.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -61,7 +107,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new RsaSecurityKey(rsa)
+            IssuerSigningKey = new RsaSecurityKey(rsa),
+            RoleClaimType = "role",
+            NameClaimType = "sub"
+        };
+
+        // SignalR WebSocket upgrade: bearer token comes via query string
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) &&
+                    context.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = token;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -85,6 +148,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim("user_type", "rider"));
     options.AddPolicy("Restaurant", policy =>
         policy.RequireClaim("user_type", "restaurant"));
+    options.AddPolicy("Owner", policy =>
+        policy.RequireClaim("user_type", "owner"));
     options.AddPolicy("Admin", policy =>
         policy.RequireClaim("user_type", "admin"));
     options.AddPolicy("AdminOrRestaurant", policy =>
@@ -109,6 +174,12 @@ builder.Services.AddAuthorization(options =>
 // Add these lines
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPricingInfrastructure(builder.Configuration);
+
+// Register SignalR notification handlers from this assembly (avoids circular dep on IHubContext)
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
+
+// Override StubRiderNotificationService with real SignalR implementation
+builder.Services.AddScoped<IRiderNotificationService, SignalRRiderNotificationService>();
 
 
 // Add Swagger
@@ -182,6 +253,19 @@ builder.Services.AddRateLimiter(options =>
                 SegmentsPerWindow = 2
             }));
 
+    // Admin CSV export: 5 requests/minute per admin (by JWT sub claim).
+    // Falls back to remote IP if unauthenticated, but the endpoint also requires auth.
+    options.AddPolicy("admin-export", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.User.FindFirst("sub")?.Value
+                ?? context.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 100 : 5,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
     options.RejectionStatusCode = 429;
 });
 
@@ -194,7 +278,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",     // React dev server
                 "http://localhost:5173",     // Vite dev server
                 "http://localhost:8081",     // Expo/React Native web
-                "https://hivago.vercel.app")   // Production 
+                "https://hivago.vercel.app",   // Production 
+                "https://hivago-restaurant.vercel.app",
+                "http://localhost:4173")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
@@ -208,6 +294,16 @@ var app = builder.Build();
 
 // Add Global Exception Handler (early in pipeline!)
 app.UseGlobalExceptionHandler();
+
+// Serilog request logging — replaces default Microsoft request logging
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
+    };
+});
 
 // Configure pipeline
 if (app.Environment.IsDevelopment())
@@ -225,8 +321,16 @@ app.UseAuthorization();
 app.MapUsersEndpoints();
 app.MapCatalogEndpoints();
 app.MapOrdersEndpoints();
+app.MapCartEndpoints();
 app.MapPaymentEndpoints();
+app.MapPayoutEndpoints();
 app.MapDeliveryModuleEndpoints();
+if (app.Environment.IsDevelopment())
+{
+    app.MapPurgeOrdersByRestaurant();
+    app.MapSeedRestaurantOwner();
+}
+app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => "Rally API is running!");
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
@@ -260,6 +364,10 @@ using (var scope = app.Services.CreateScope())
         logger.LogInformation("Migrating Pricing database...");
         pricingDb.Database.Migrate();
 
+        var auditDb = scope.ServiceProvider.GetRequiredService<RallyAPI.Infrastructure.Persistence.AuditDbContext>();
+        logger.LogInformation("Migrating Audit database...");
+        auditDb.Database.Migrate();
+
         logger.LogInformation("All migrations completed successfully.");
     }
     catch (Exception ex)
@@ -271,7 +379,15 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 
    static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)

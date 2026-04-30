@@ -15,7 +15,11 @@ public sealed record RestaurantDetails
     public required double Longitude { get; init; }
     public required bool IsActive { get; init; }
     public required bool IsAcceptingOrders { get; init; }
+    public required bool AutoAcceptOrders { get; init; }
     public required int AvgPrepTimeMins { get; init; }
     public required TimeOnly OpeningTime { get; init; }
     public required TimeOnly ClosingTime { get; init; }
+    public required decimal CommissionPercentage { get; init; }
+    public required decimal CommissionFlatFee { get; init; }
+    public Guid? OwnerId { get; init; }
 }

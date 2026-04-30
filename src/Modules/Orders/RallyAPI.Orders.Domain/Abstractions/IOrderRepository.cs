@@ -49,10 +49,36 @@ public interface IOrderRepository
     DateTime olderThan,
     CancellationToken cancellationToken = default);
 
+    // Escalated orders (admin view)
+    Task<IReadOnlyList<Order>> GetEscalatedAsync(
+        int skip = 0,
+        int take = 20,
+        CancellationToken cancellationToken = default);
+    Task<int> CountEscalatedAsync(CancellationToken cancellationToken = default);
+
     // Counts
     Task<int> GetCountByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task<int> GetCountByRestaurantIdAsync(Guid restaurantId, CancellationToken cancellationToken = default);
     Task<int> GetActiveOrdersCountAsync(CancellationToken cancellationToken = default);
+
+    // Filtered query (admin)
+    Task<IReadOnlyList<Order>> GetFilteredAsync(
+        OrderStatus? status = null,
+        Guid? restaurantId = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? search = null,
+        int skip = 0,
+        int take = 20,
+        CancellationToken cancellationToken = default);
+
+    Task<int> GetFilteredCountAsync(
+        OrderStatus? status = null,
+        Guid? restaurantId = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? search = null,
+        CancellationToken cancellationToken = default);
 
     // Existence checks
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);

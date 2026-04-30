@@ -14,6 +14,7 @@ public interface IJwtProvider
     TokenPair GenerateRiderTokenPair(Rider rider);
     TokenPair GenerateRestaurantTokenPair(Restaurant restaurant);
     TokenPair GenerateAdminTokenPair(Admin admin);
+    TokenPair GenerateOwnerTokenPair(RestaurantOwner owner);
 }
 
 // The response both tokens travel in

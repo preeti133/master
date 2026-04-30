@@ -35,6 +35,12 @@ public sealed class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrde
             return Result.Failure<OrderDto>(OrderErrors.NotFound(command.OrderId));
         }
 
+        // Verify caller owns this order for the given transition
+        if (!IsAuthorized(order, command.TargetStatus, command.ActorId, command.ActorRole))
+        {
+            return Result.Failure<OrderDto>(OrderErrors.Unauthorized);
+        }
+
         // Validate transition is allowed
         var validTransitions = order.GetValidTransitions();
         if (!validTransitions.Contains(command.TargetStatus))
@@ -96,5 +102,25 @@ public sealed class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrde
                     order.Status.GetDisplayName(),
                     command.TargetStatus.GetDisplayName()));
         }
+    }
+
+    private static bool IsAuthorized(
+        Domain.Entities.Order order,
+        OrderStatus targetStatus,
+        Guid? actorId,
+        string? actorRole)
+    {
+        if (actorRole == "Admin") return true;
+
+        return targetStatus switch
+        {
+            OrderStatus.Preparing or OrderStatus.ReadyForPickup =>
+                actorRole == "Restaurant" && order.RestaurantId == actorId,
+
+            OrderStatus.PickedUp or OrderStatus.Delivered =>
+                actorRole == "Rider" && order.DeliveryInfo.RiderId == actorId,
+
+            _ => false
+        };
     }
 }

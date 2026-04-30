@@ -43,4 +43,9 @@ public class CustomerRepository : ICustomerRepository
     {
         _context.Customers.Update(customer);
     }
+
+    public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Customers.CountAsync(cancellationToken);
+    }
 }

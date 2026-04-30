@@ -29,7 +29,8 @@ internal sealed class GetCustomerProfileQueryHandler
             a.Address.Latitude,
             a.Address.Longitude,
             a.Address.Label,
-            a.IsDefault)).ToList();
+            a.IsDefault,
+            a.Address.PlaceId)).ToList();
 
         var response = new CustomerProfileResponse(
             customer.Id,

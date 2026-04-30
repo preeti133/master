@@ -1,11 +1,19 @@
 ﻿using RallyAPI.SharedKernel.Domain;
 using RallyAPI.SharedKernel.Results;
+using RallyAPI.Users.Domain.Enums;
 using RallyAPI.Users.Domain.ValueObjects;
 
 namespace RallyAPI.Users.Domain.Entities;
 
 public sealed class Restaurant : AggregateRoot
 {
+    /// <summary>
+    /// Short human-readable identifier for ops staff (e.g. "RST001"). Unique per restaurant.
+    /// Assigned at create time by Users.Application; nullable here only because legacy rows
+    /// pre-date the column and are backfilled by migration.
+    /// </summary>
+    public string? RstCode { get; private set; }
+
     public string Name { get; private set; }
     public PhoneNumber Phone { get; private set; }
     public Email Email { get; private set; }
@@ -19,8 +27,46 @@ public sealed class Restaurant : AggregateRoot
     public TimeOnly OpeningTime { get; private set; }
     public TimeOnly ClosingTime { get; private set; }
     public decimal CommissionPercentage { get; private set; }
+
+    // Phase 2 payouts: flat-fee commission (₹ per order) replacing percentage going forward.
+    // CommissionPercentage is kept for one release as a rollback safety net.
+    public decimal CommissionFlatFee { get; private set; }
+
+    public bool AutoAcceptOrders { get; private set; }
     public string? LogoUrl { get; private set; }
-    public string? LogoFileKey { get; private set; }  // ← add this
+    public string? LogoFileKey { get; private set; }
+
+    // Owner link (multi-outlet support)
+    public Guid? OwnerId { get; private set; }
+
+    // Compliance
+    public string? FssaiNumber { get; private set; }
+
+    // Description
+    public string? Description { get; private set; }
+
+    // Restaurant attributes (cuisine/dietary)
+    public List<string> CuisineTypes { get; private set; } = new();
+    public bool IsPureVeg { get; private set; }
+    public bool IsVeganFriendly { get; private set; }
+    public bool HasJainOptions { get; private set; }
+    public decimal MinOrderAmount { get; private set; }
+
+    // Dietary category (primary) + additive flags above
+    public DietaryType DietaryType { get; private set; } = DietaryType.Both;
+
+    // Delivery fulfilment preference
+    public DeliveryMode DeliveryMode { get; private set; } = DeliveryMode.Hivago;
+
+    // Use custom weekly schedule (slots) instead of legacy single OpeningTime/ClosingTime
+    public bool UseCustomSchedule { get; private set; }
+
+    // Notification preferences (owned value object)
+    public NotificationPreferences Notifications { get; private set; } = NotificationPreferences.Default();
+
+    // Weekly schedule — up to 3 slots per DayOfWeek
+    private readonly List<RestaurantScheduleSlot> _scheduleSlots = new();
+    public IReadOnlyCollection<RestaurantScheduleSlot> ScheduleSlots => _scheduleSlots.AsReadOnly();
 
     // EF Core
     private Restaurant() { }
@@ -32,7 +78,8 @@ public sealed class Restaurant : AggregateRoot
         string passwordHash,
         string addressLine,
         decimal latitude,
-        decimal longitude)
+        decimal longitude,
+        string? rstCode)
     {
         Name = name;
         Phone = phone;
@@ -41,12 +88,15 @@ public sealed class Restaurant : AggregateRoot
         AddressLine = addressLine;
         Latitude = latitude;
         Longitude = longitude;
+        RstCode = rstCode;
         IsActive = true;
         IsAcceptingOrders = false; // Start as not accepting
+        AutoAcceptOrders = false; // Restaurant must opt in
         AvgPrepTimeMins = 20; // Default
         OpeningTime = new TimeOnly(9, 0);
         ClosingTime = new TimeOnly(22, 0);
-        CommissionPercentage = 20.0m; // Default 20%
+        CommissionPercentage = 20.0m; // Default 20% (legacy)
+        CommissionFlatFee = 30.0m;    // Default ₹30 flat per order (Phase 2)
     }
 
     public static Result<Restaurant> Create(
@@ -56,7 +106,8 @@ public sealed class Restaurant : AggregateRoot
         string passwordHash,
         string addressLine,
         decimal latitude,
-        decimal longitude)
+        decimal longitude,
+        string? rstCode = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure<Restaurant>(Error.Validation("Restaurant name is required."));
@@ -74,7 +125,15 @@ public sealed class Restaurant : AggregateRoot
         if (latitude < 6 || latitude > 38 || longitude < 68 || longitude > 98)
             return Result.Failure<Restaurant>(Error.Validation("Invalid location coordinates."));
 
-        return new Restaurant(name.Trim(), phone, email, passwordHash, addressLine.Trim(), latitude, longitude);
+        return new Restaurant(
+            name.Trim(),
+            phone,
+            email,
+            passwordHash,
+            addressLine.Trim(),
+            latitude,
+            longitude,
+            string.IsNullOrWhiteSpace(rstCode) ? null : rstCode.Trim());
     }
 
     public Result UpdateProfile(string? name, string? addressLine, PhoneNumber? phone)
@@ -149,6 +208,13 @@ public sealed class Restaurant : AggregateRoot
         return Result.Success();
     }
 
+    public Result SetAutoAcceptOrders(bool enabled)
+    {
+        AutoAcceptOrders = enabled;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
     public Result UpdatePassword(string newPasswordHash)
     {
         if (string.IsNullOrWhiteSpace(newPasswordHash))
@@ -193,4 +259,159 @@ public sealed class Restaurant : AggregateRoot
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public Result SetOwner(Guid ownerId)
+    {
+        if (ownerId == Guid.Empty)
+            return Result.Failure(Error.Validation("Owner ID is required."));
+
+        OwnerId = ownerId;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetFssaiNumber(string fssaiNumber)
+    {
+        if (string.IsNullOrWhiteSpace(fssaiNumber))
+            return Result.Failure(Error.Validation("FSSAI number is required."));
+
+        fssaiNumber = fssaiNumber.Trim();
+
+        if (fssaiNumber.Length < 14 || fssaiNumber.Length > 20)
+            return Result.Failure(Error.Validation("FSSAI number must be between 14 and 20 characters."));
+
+        FssaiNumber = fssaiNumber;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetCuisineTypes(List<string> cuisineTypes)
+    {
+        CuisineTypes = cuisineTypes?.Select(c => c.Trim()).Where(c => !string.IsNullOrEmpty(c)).ToList() ?? new();
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetDietaryAttributes(bool isPureVeg, bool isVeganFriendly, bool hasJainOptions)
+    {
+        IsPureVeg = isPureVeg;
+        IsVeganFriendly = isVeganFriendly;
+        HasJainOptions = hasJainOptions;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetMinOrderAmount(decimal amount)
+    {
+        if (amount < 0)
+            return Result.Failure(Error.Validation("Minimum order amount cannot be negative."));
+
+        MinOrderAmount = amount;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetCommissionPercentage(decimal percentage)
+    {
+        if (percentage < 0 || percentage > 100)
+            return Result.Failure(Error.Validation("Commission percentage must be between 0 and 100."));
+
+        CommissionPercentage = percentage;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetCommissionFlatFee(decimal flatFee)
+    {
+        if (flatFee < 0)
+            return Result.Failure(Error.Validation("Commission flat fee cannot be negative."));
+
+        if (flatFee > 10000)
+            return Result.Failure(Error.Validation("Commission flat fee is unreasonably large."));
+
+        CommissionFlatFee = flatFee;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetDescription(string? description)
+    {
+        if (description is { Length: > 2000 })
+            return Result.Failure(Error.Validation("Description must be 2000 characters or fewer."));
+
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetEmail(Email email)
+    {
+        Email = email;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetDietaryType(DietaryType dietaryType)
+    {
+        DietaryType = dietaryType;
+        IsPureVeg = dietaryType == DietaryType.PureVeg;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetDeliveryMode(DeliveryMode mode)
+    {
+        DeliveryMode = mode;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetUseCustomSchedule(bool useCustom)
+    {
+        UseCustomSchedule = useCustom;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result SetNotificationPreferences(NotificationPreferences preferences)
+    {
+        if (preferences is null)
+            return Result.Failure(Error.Validation("Notification preferences are required."));
+
+        Notifications = preferences;
+        MarkAsUpdated();
+        return Result.Success();
+    }
+
+    public Result ReplaceScheduleForDay(DayOfWeek day, IReadOnlyList<(TimeOnly OpensAt, TimeOnly ClosesAt)> slots)
+    {
+        if (slots is null)
+            return Result.Failure(Error.Validation("Slots collection is required."));
+
+        if (slots.Count > 3)
+            return Result.Failure(Error.Validation($"{day}: at most 3 slots per day are allowed."));
+
+        var ordered = slots.OrderBy(s => s.OpensAt).ToList();
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (ordered[i].OpensAt >= ordered[i].ClosesAt)
+                return Result.Failure(Error.Validation($"{day} slot {i + 1}: opens-at must be earlier than closes-at."));
+
+            if (i > 0 && ordered[i].OpensAt < ordered[i - 1].ClosesAt)
+                return Result.Failure(Error.Validation($"{day}: slots must not overlap."));
+        }
+
+        _scheduleSlots.RemoveAll(s => s.DayOfWeek == day);
+
+        foreach (var (opensAt, closesAt) in ordered)
+        {
+            var slotResult = RestaurantScheduleSlot.Create(Id, day, opensAt, closesAt);
+            if (slotResult.IsFailure)
+                return Result.Failure(slotResult.Error);
+            _scheduleSlots.Add(slotResult.Value);
+        }
+
+        MarkAsUpdated();
+        return Result.Success();
+    }
 }

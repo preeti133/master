@@ -12,18 +12,21 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.AddColumn<Guid>(
                 name: "current_delivery_id",
+                schema: "users",
                 table: "riders",
                 type: "uuid",
                 nullable: true);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "current_delivery_assigned_at",
+                schema: "users",
                 table: "riders",
                 type: "timestamp with time zone",
                 nullable: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_riders_availability",
+                schema: "users",
                 table: "riders",
                 columns: new[] { "is_online", "is_active", "current_delivery_id" });
         }
@@ -31,9 +34,20 @@ namespace RallyAPI.Users.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_riders_availability;");
-            migrationBuilder.Sql("ALTER TABLE riders DROP COLUMN IF EXISTS current_delivery_id;");
-            migrationBuilder.Sql("ALTER TABLE riders DROP COLUMN IF EXISTS current_delivery_assigned_at;");
+            migrationBuilder.DropIndex(
+                name: "ix_riders_availability",
+                schema: "users",
+                table: "riders");
+
+            migrationBuilder.DropColumn(
+                name: "current_delivery_id",
+                schema: "users",
+                table: "riders");
+
+            migrationBuilder.DropColumn(
+                name: "current_delivery_assigned_at",
+                schema: "users",
+                table: "riders");
         }
     }
 }

@@ -25,6 +25,22 @@ public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery
             return Result.Failure<OrderDto>(OrderErrors.NotFound(query.OrderId));
         }
 
+        if (!IsAuthorized(order, query.CallerId, query.CallerRole))
+        {
+            // Return NotFound — do not reveal that the order exists to unauthorized callers
+            return Result.Failure<OrderDto>(OrderErrors.NotFound(query.OrderId));
+        }
+
         return Result.Success(order.ToDto());
     }
+
+    private static bool IsAuthorized(Domain.Entities.Order order, Guid callerId, string callerRole) =>
+        callerRole switch
+        {
+            "Admin"      => true,
+            "Customer"   => order.CustomerId == callerId,
+            "Restaurant" => order.RestaurantId == callerId,
+            "Rider"      => order.DeliveryInfo.RiderId == callerId,
+            _            => false
+        };
 }

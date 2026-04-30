@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using RallyAPI.SharedKernel.Extensions;
 using RallyAPI.Users.Application.Customers.Commands.AddAddress;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
@@ -23,7 +24,8 @@ public class AddAddress : IEndpoint
         decimal Latitude,
         decimal Longitude,
         string Label,
-        bool IsDefault);
+        bool IsDefault,
+        string? PlaceId = null);
 
     private static async Task<IResult> HandleAsync(
         AddCustomerAddressRequest request,
@@ -42,13 +44,14 @@ public class AddAddress : IEndpoint
             request.Landmark,
             request.Latitude,
             request.Longitude,
-            request.Label);
+            request.Label,
+            request.PlaceId);
         //Removed this parameter        request.IsDefault
 
     var result = await sender.Send(command, cancellationToken);
 
         return result.IsFailure
-            ? Results.BadRequest(new { error = result.Error.Message })
+            ? result.Error.ToErrorResult()
             : Results.Created($"/api/customers/addresses/{result.Value}", new { addressId = result.Value });
     }
 }
